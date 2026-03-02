@@ -1,19 +1,22 @@
+// index.js
+
 import http from "http";
-import mongoose from "mongoose";
 import { WebSocketServer } from "ws";
+import mongoose from "mongoose"; 
 import { routeEvent, unregisterUser } from "./router.js";
 
-// Render automatically provides a PORT (usually 10000)
-const PORT = process.env.PORT || 10000;
-const HOST = '0.0.0.0';
+const PORT = process.env.PORT || 8080;
 
-// Connect to MongoDB Atlas using the URI from Render Environment Variables
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ Connected to MongoDB Atlas"))
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
+// 👇 Your exact link with "SecureChat" added in the middle
+// 🔴 REMEMBER: Replace the username and password before running!
+const MONGO_URI = "mongodb+srv://pushpbamne:MMK848fFZEj9x7P9@cluster0.eeo719o.mongodb.net/SecureChat?appName=Cluster0";
 
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
+
+mongoose.connect(MONGO_URI)
+  .then(() => console.log("📦 Connected to MongoDB successfully"))
+  .catch((err) => console.error("Database connection error:", err));
 
 wss.on("connection", (socket) => {
   console.log("New connection established");
@@ -36,6 +39,6 @@ wss.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`Secure chat server running on http://${HOST}:${PORT}`);
+server.listen(PORT, () => {
+  console.log(`Secure chat server running on port ${PORT}`);
 });
