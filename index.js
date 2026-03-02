@@ -1,8 +1,16 @@
 import http from "http";
+import mongoose from "mongoose";
 import { WebSocketServer } from "ws";
 import { routeEvent, unregisterUser } from "./router.js";
 
-const PORT = process.env.PORT || 8080;
+// Render automatically provides a PORT (usually 10000)
+const PORT = process.env.PORT || 10000;
+const HOST = '0.0.0.0';
+
+// Connect to MongoDB Atlas using the URI from Render Environment Variables
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ Connected to MongoDB Atlas"))
+  .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
@@ -12,7 +20,6 @@ wss.on("connection", (socket) => {
 
   socket.on("message", (data) => {
     try {
-      // .toString() guarantees safe parsing even if data arrives as a raw Buffer
       const event = JSON.parse(data.toString());
       routeEvent(socket, event);
     } catch (err) {
@@ -24,12 +31,11 @@ wss.on("connection", (socket) => {
     unregisterUser(socket);
   });
 
-  // Catches sudden network drops from mobile devices so the server doesn't crash
   socket.on("error", (err) => {
     console.error("WebSocket connection error:", err.message);
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Secure chat server running on port ${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Secure chat server running on http://${HOST}:${PORT}`);
 });
