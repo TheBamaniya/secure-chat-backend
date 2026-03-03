@@ -4,29 +4,36 @@ import mongoose from "mongoose";
 import { routeEvent, unregisterUser } from "./router.js";
 
 const PORT = process.env.PORT || 8080;
-// 🔴 REPLACE with your actual password from MongoDB Atlas
-const MONGO_URI = "mongodb+srv://pushpbamne:RFRthvqIfmVASoU8@cluster0.eeo719o.mongodb.net/chatdb?retryWrites=true&w=majority";
 
-const server = http.createServer();
+// Mongo connect (assuming fixed URI)
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("Mongo connected"))
+  .catch(err => console.error("Database connection error:", err));
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end("Server is running");
+});
+
 const wss = new WebSocketServer({ server });
-
-// Connect to MongoDB with IPv4 force to bypass local DNS blocks
-mongoose.connect(MONGO_URI, { family: 4 })
-  .then(() => console.log("📦 Connected to MongoDB successfully"))
-  .catch((err) => console.error("Database connection error:", err.message));
 
 wss.on("connection", (socket) => {
   console.log("New connection");
+
   socket.on("message", (data) => {
     try {
-      const event = JSON.parse(data.toString());
+      const event = JSON.parse(data);
       routeEvent(socket, event);
     } catch (err) {
-      console.error("Invalid JSON:", err.message);
+      console.error("Invalid JSON:", err);
     }
   });
-  socket.on("close", () => unregisterUser(socket));
-  socket.on("error", (err) => console.error("Socket error:", err.message));
+
+  socket.on("close", () => {
+    unregisterUser(socket);
+  });
 });
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
