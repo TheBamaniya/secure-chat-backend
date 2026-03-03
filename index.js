@@ -5,7 +5,7 @@ import { routeEvent, unregisterUser } from "./router.js";
 
 const PORT = process.env.PORT || 8080;
 // 🔴 REPLACE with your actual password from MongoDB Atlas
-const MONGO_URI = "mongodb+srv://pushpbamne:RFRthvqIfmVASoU8@cluster0.eeo719o.mongodb.net/?appName=Cluster0";
+const MONGO_URI = "mongodb+srv://pushpbamne:RFRthvqIfmVASoU8@cluster0.eeo719o.mongodb.net/chatdb?retryWrites=true&w=majority";
 
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
