@@ -1,54 +1,59 @@
 import { Message } from "./models/Message.js";
 
-// Map to keep track of active users: { userId: socket }
-const activeUsers = new Map();
+const connectedUsers = new Map();
 
-export async function routeEvent(socket, event) {
-  const { type, payload } = event;
-
-  switch (type) {
-    case "REGISTER":
-      // Example payload: { userId: "user123" }
-      activeUsers.set(payload.userId, socket);
-      socket.userId = payload.userId;
-      console.log(`User registered: ${payload.userId}`);
+export function routeEvent(socket, event) {
+  switch (event.event_type) {
+    case "IDENTIFY":
+      socket.userId = event.user_id;
+      connectedUsers.set(event.user_id, socket);
+      console.log(`User registered: ${event.user_id}`);
       break;
-
-    case "MESSAGE":
-      // Example payload: { to: "user456", message: "Hello!" }
-      try {
-        // 1. Create and save the message to MongoDB
-        const chatMessage = new Message({
-          senderId: socket.userId,
-          receiverId: payload.to,
-          message: payload.message,
-        });
-        await chatMessage.save();
-        console.log(`Message saved from ${socket.userId} to ${payload.to}`);
-
-        // 2. Forward to the recipient if they are online
-        const recipientSocket = activeUsers.get(payload.to);
-        if (recipientSocket) {
-          recipientSocket.send(JSON.stringify({
-            type: "MESSAGE",
-            payload: { from: socket.userId, message: payload.message }
-          }));
-        } else {
-          console.log(`User ${payload.to} is offline. Message is saved in DB.`);
-        }
-      } catch (err) {
-        console.error("Error handling message:", err.message);
-      }
+    case "MESSAGE_SEND":
+      handleMessageSend(socket, event);
       break;
-
-    default:
-      console.warn("Unknown event type:", type);
+    case "FETCH_HISTORY":
+      handleFetchHistory(socket, event);
+      break;
   }
 }
 
-export function unregisterUser(socket) {
-  if (socket.userId) {
-    activeUsers.delete(socket.userId);
-    console.log(`User disconnected: ${socket.userId}`);
+async function handleMessageSend(socket, event) {
+  const { to, payload, message_id, sent_at } = event;
+  
+  // Save to MongoDB
+  const newMessage = new Message({
+    message_id: message_id || Date.now().toString(),
+    from: socket.userId,
+    to,
+    payload,
+    sent_at: sent_at || Date.now()
+  });
+  await newMessage.save();
+
+  const target = connectedUsers.get(to);
+  if (target) {
+    target.send(JSON.stringify({
+      event_type: "MESSAGE_RECEIVE",
+      from: socket.userId,
+      payload,
+      message_id: newMessage.message_id,
+      sent_at: newMessage.sent_at
+    }));
   }
+}
+
+async function handleFetchHistory(socket, event) {
+  const history = await Message.find({
+    $or: [
+      { from: socket.userId, to: event.with_user },
+      { from: event.with_user, to: socket.userId }
+    ]
+  }).sort({ sent_at: 1 });
+
+  socket.send(JSON.stringify({ event_type: "HISTORY_DATA", payload: history }));
+}
+
+export function unregisterUser(socket) {
+  if (socket.userId) connectedUsers.delete(socket.userId);
 }

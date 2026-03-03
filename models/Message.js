@@ -1,10 +1,11 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema({
-  senderId: { type: String, required: true, index: true },
-  receiverId: { type: String, required: true, index: true },
-  message: { type: String, required: true },
-  timestamp: { type: Date, default: Date.now }
+  message_id: { type: String, required: true },
+  from: { type: String, required: true },
+  to: { type: String, required: true },
+  payload: { type: Object, required: true }, // Stores the encrypted ciphertext/iv/tag
+  sent_at: { type: Number, required: true }
 });
 
-export const Message = mongoose.model('Message', messageSchema);
+export const Message = mongoose.model("Message", messageSchema);
