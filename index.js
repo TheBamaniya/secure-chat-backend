@@ -3,9 +3,11 @@ import { WebSocketServer } from "ws";
 import mongoose from "mongoose";
 import { routeEvent, unregisterUser } from "./router.js";
 
+// 👈 1. THE IMPORT: This goes at the very top with your other imports
+import { startCleanupJob } from "./cleanup.js"; 
+
 const PORT = process.env.PORT || 8080;
 
-// Mongo connect (assuming fixed URI)
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("Mongo connected"))
   .catch(err => console.error("Database connection error:", err));
@@ -33,6 +35,9 @@ wss.on("connection", (socket) => {
     unregisterUser(socket);
   });
 });
+
+// 👈 2. THE COMMAND: This goes right here, just before the server starts listening
+startCleanupJob(); 
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
