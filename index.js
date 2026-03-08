@@ -1,84 +1,53 @@
 import { WebSocketServer, WebSocket } from 'ws';
 
-// 1. Create the server on port 8080 (or process.env.PORT for Render)
 const port = process.env.PORT || 8080;
 const wss = new WebSocketServer({ port });
-
-// 2. Map to store: Key = userId, Value = WebSocket instance
 const clients = new Map();
 
-console.log(`🚀 WebSocket Server started on port ${port}`);
+console.log(`🚀 WebSocket Server live on port ${port}`);
 
 wss.on('connection', (ws) => {
     let currentUserId = null;
 
+    // 💓 Heartbeat to keep Render.com connection alive
+    const timer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.ping();
+        else clearInterval(timer);
+    }, 30000);
+
     ws.on('message', (data) => {
         try {
-            // Convert Buffer/Blob to String before parsing
             const message = JSON.parse(data.toString());
-            console.log("📩 Received:", message);
-
-            // --- A. REGISTRATION ---
-            if (message.type === 'register') {
+            
+            // --- 1. REGISTRATION ---
+            if (message.type === 'register' || message.type === 'init') {
                 currentUserId = message.userId;
                 clients.set(currentUserId, ws);
-                console.log(`✅ User Registered: ${currentUserId}`);
-                
-                broadcastPresence(currentUserId, true);
+                console.log(`✅ Registered: ${currentUserId}`);
                 return;
             }
 
-            // --- B. STATUS CHECK ---
-            if (message.type === 'check_status') {
-                const isOnline = clients.has(message.targetId);
-                ws.send(JSON.stringify({
-                    type: 'presence',
-                    userId: message.targetId,
-                    isOnline: isOnline
-                }));
-                return;
-            }
+            // --- 2. DYNAMIC ROUTING ---
+            // Fix: Check for 'to' at top level OR inside 'data' object
+            const recipientId = message.to || (message.data && message.data.to);
 
-            // --- C. CHAT ROUTING ---
-            if (message.to) {
-                const receiverSocket = clients.get(message.to);
-
-                if (receiverSocket && receiverSocket.readyState === WebSocket.OPEN) {
-                    receiverSocket.send(JSON.stringify(message));
-                    console.log(`➡️ Message delivered to ${message.to}`);
+            if (recipientId) {
+                const target = clients.get(recipientId);
+                if (target && target.readyState === WebSocket.OPEN) {
+                    target.send(JSON.stringify(message));
+                    console.log(`➡️ Delivered to ${recipientId}`);
                 } else {
-                    console.log(`⚠️ User ${message.to} is offline.`);
+                    console.log(`⚠️ User ${recipientId} is offline`);
                 }
             }
-
-        } catch (e) {
-            console.error("❌ Error parsing message:", e);
-        }
+        } catch (e) { console.error("Parse Error:", e); }
     });
 
     ws.on('close', () => {
         if (currentUserId) {
-            console.log(`❌ User Disconnected: ${currentUserId}`);
             clients.delete(currentUserId);
-            broadcastPresence(currentUserId, false);
+            console.log(`❌ Disconnected: ${currentUserId}`);
         }
-    });
-
-    ws.on('error', (error) => {
-        console.error(`🛠️ Socket Error for ${currentUserId}:`, error);
+        clearInterval(timer);
     });
 });
-
-function broadcastPresence(userId, isOnline) {
-    const presenceUpdate = JSON.stringify({
-        type: 'presence',
-        userId: userId,
-        isOnline: isOnline
-    });
-
-    clients.forEach((clientSocket) => {
-        if (clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.send(presenceUpdate);
-        }
-    });
-}
