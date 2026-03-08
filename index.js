@@ -1,45 +1,89 @@
-import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
-import { routeEvent, unregisterUser } from './router.js';
+const WebSocket = require('ws');
 
-// Use the port Render assigns, or 3000 for local testing
-const port = process.env.PORT || 3000;
+// 1. Create the server on port 8080
+const wss = new WebSocket.Server({ port: 8080 });
 
-// 1. Create a basic HTTP server
-// Render needs this to know your app is "alive" (Health Check)
-const server = createServer((req, res) => {
-  res.writeHead(200);
-  res.end('RCS Clone Backend is Running!');
+// 2. Map to store: Key = userId, Value = WebSocket instance
+const clients = new Map();
+
+console.log("🚀 WebSocket Server started on ws://localhost:8080");
+
+wss.on('connection', (ws) => {
+    let currentUserId = null;
+
+    ws.on('message', (data) => {
+        try {
+            const message = JSON.parse(data);
+            console.log("📩 Received:", message);
+
+            // --- A. REGISTRATION ---
+            // When the Flutter app connects, it must send: { "type": "register", "userId": "user_123" }
+            if (message.type === 'register') {
+                currentUserId = message.userId;
+                clients.set(currentUserId, ws);
+                console.log(`✅ User Registered: ${currentUserId}`);
+                
+                // Notify others this user is online
+                broadcastPresence(currentUserId, true);
+                return;
+            }
+
+            // --- B. STATUS CHECK ---
+            if (message.type === 'check_status') {
+                const isOnline = clients.has(message.targetId);
+                ws.send(JSON.stringify({
+                    type: 'presence',
+                    userId: message.targetId,
+                    isOnline: isOnline
+                }));
+                return;
+            }
+
+            // --- C. CHAT ROUTING ---
+            // Flutter sends a Message object with a "to" field
+            if (message.to) {
+                const receiverSocket = clients.get(message.to);
+
+                if (receiverSocket && receiverSocket.readyState === WebSocket.OPEN) {
+                    // Deliver to the recipient
+                    receiverSocket.send(JSON.stringify(message));
+                    console.log(`➡️ Message delivered to ${message.to}`);
+                } else {
+                    console.log(`⚠️ User ${message.to} is offline. Message not delivered.`);
+                    // Optional: Store in a "Pending" database here
+                }
+            }
+
+        } catch (e) {
+            console.error("❌ Error parsing message:", e);
+        }
+    });
+
+    // --- D. DISCONNECTION ---
+    ws.on('close', () => {
+        if (currentUserId) {
+            console.log(`❌ User Disconnected: ${currentUserId}`);
+            clients.delete(currentUserId);
+            broadcastPresence(currentUserId, false);
+        }
+    });
+
+    ws.on('error', (error) => {
+        console.error(`🛠️ Socket Error for ${currentUserId}:`, error);
+    });
 });
 
-// 2. Attach WebSocket server to the HTTP server
-const wss = new WebSocketServer({ server });
+// Helper: Tell everyone when someone's status changes
+function broadcastPresence(userId, isOnline) {
+    const presenceUpdate = JSON.stringify({
+        type: 'presence',
+        userId: userId,
+        isOnline: isOnline
+    });
 
-wss.on('connection', (socket) => {
-  console.log('⚡ New client connected');
-
-  // Route incoming messages to router.js
-  socket.on('message', (message) => {
-    try {
-      const parsedData = JSON.parse(message);
-      routeEvent(socket, parsedData);
-    } catch (e) {
-      console.error('❌ Error parsing JSON:', e);
-    }
-  });
-
-  // Handle disconnections
-  socket.on('close', () => {
-    unregisterUser(socket);
-  });
-
-  // Handle errors
-  socket.on('error', (error) => {
-    console.error('WebSocket Error:', error);
-  });
-});
-
-// 3. Start listening
-server.listen(port, () => {
-  console.log(`🚀 Server listening on port ${port}`);
-});
+    clients.forEach((clientSocket) => {
+        if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(presenceUpdate);
+        }
+    });
+}
