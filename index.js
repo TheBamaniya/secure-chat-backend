@@ -1,13 +1,18 @@
-const WebSocket = require('ws');
-const http = require('http');
-const express = require('express');
+import WebSocket, { WebSocketServer } from 'ws';
+import http from 'http';
+import express from 'express';
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 
 // Map to store active connections: { userId: socket }
 const clients = new Map();
+
+// Keep Render alive with a simple health check
+app.get('/', (req, res) => {
+    res.send('Server is running');
+});
 
 wss.on('connection', (ws) => {
     console.log('New client connection initiated.');
@@ -18,7 +23,6 @@ wss.on('connection', (ws) => {
 
             switch (message.type) {
                 case 'register':
-                    // Map the unique userId to this specific socket connection
                     clients.set(message.userId, ws);
                     ws.userId = message.userId;
                     console.log(`User registered: ${message.userId}`);
@@ -26,20 +30,16 @@ wss.on('connection', (ws) => {
                     break;
 
                 case 'message':
-                    // Route the encrypted message to the target peerId
                     const { to, from } = message.data;
                     const recipientSocket = clients.get(to);
 
                     if (recipientSocket && recipientSocket.readyState === WebSocket.OPEN) {
                         recipientSocket.send(JSON.stringify(message.data));
                         console.log(`Routed message from ${from} to ${to}`);
-                    } else {
-                        console.log(`Recipient ${to} is offline. Message held or dropped.`);
                     }
                     break;
 
                 case 'delete':
-                    // Broadcast a delete request to all clients for a specific message ID
                     broadcastToAll({ type: 'delete_id', id: message.delete_id });
                     break;
             }
@@ -51,18 +51,15 @@ wss.on('connection', (ws) => {
     ws.on('close', () => {
         if (ws.userId) {
             clients.delete(ws.userId);
-            console.log(`User disconnected: ${ws.userId}`);
             broadcastPresence(ws.userId, false);
         }
     });
 });
 
-// Helper: Notify all users about a change in someone's online status
 function broadcastPresence(userId, isOnline) {
     broadcastToAll({ type: 'presence', userId, isOnline });
 }
 
-// Helper: Send data to every connected client
 function broadcastToAll(data) {
     const payload = JSON.stringify(data);
     clients.forEach((client) => {
