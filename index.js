@@ -9,9 +9,9 @@ const wss = new WebSocketServer({ server });
 // Map to store active connections: { userId: socket }
 const clients = new Map();
 
-// Keep Render alive with a simple health check
+// 🌐 Health Check Route (Required for Render Web Services)
 app.get('/', (req, res) => {
-    res.send('Server is running');
+    res.send('Secure Chat Server is Online');
 });
 
 wss.on('connection', (ws) => {
@@ -23,6 +23,7 @@ wss.on('connection', (ws) => {
 
             switch (message.type) {
                 case 'register':
+                    // Map the unique userId to this specific socket connection
                     clients.set(message.userId, ws);
                     ws.userId = message.userId;
                     console.log(`User registered: ${message.userId}`);
@@ -30,6 +31,7 @@ wss.on('connection', (ws) => {
                     break;
 
                 case 'message':
+                    // Route the encrypted message to the target peerId
                     const { to, from } = message.data;
                     const recipientSocket = clients.get(to);
 
@@ -51,11 +53,13 @@ wss.on('connection', (ws) => {
     ws.on('close', () => {
         if (ws.userId) {
             clients.delete(ws.userId);
-            broadcastPresence(ws.userId, false);
+            console.log(`User disconnected: ${ws.userId}`);
+            broadcastPresence(ws.userId, false); // Notify others of offline status
         }
     });
 });
 
+// Notify all users about online/offline status
 function broadcastPresence(userId, isOnline) {
     broadcastToAll({ type: 'presence', userId, isOnline });
 }
@@ -69,6 +73,7 @@ function broadcastToAll(data) {
     });
 }
 
+// Render provides the PORT environment variable
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
     console.log(`Secure Chat Backend running on port ${PORT}`);

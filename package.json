@@ -1,37 +1,14 @@
 {
   "name": "secure-chat-backend",
   "version": "1.0.0",
-  "description": "Real-time WebSocket backend for Chat Clone",
-  "type": "module",
+  "description": "Secure Chat WebSocket Backend",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "ws": "^8.16.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.3"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "keywords": [
-    "websocket",
-    "chat",
-    "rcs",
-    "flutter",
-    "backend"
-  ],
-  "author": "",
-  "license": "ISC",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/TheBamaniya/secure-chat-backend.git"
-  },
-  "bugs": {
-    "url": "https://github.com/TheBamaniya/secure-chat-backend/issues"
-  },
-  "homepage": "https://github.com/TheBamaniya/secure-chat-backend#readme"
+    "express": "^4.18.2",
+    "ws": "^8.13.0"
+  }
 }
