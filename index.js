@@ -1,78 +1,45 @@
-import http from "http";
-import { WebSocketServer } from "ws";
-import mongoose from "mongoose";
-import { routeEvent, unregisterUser } from "./router.js";
-import { startCleanupJob } from "./cleanup.js";
+import { createServer } from 'http';
+import { WebSocketServer } from 'ws';
+import { routeEvent, unregisterUser } from './router.js';
 
-const PORT = process.env.PORT || 8080;
+// Use the port Render assigns, or 3000 for local testing
+const port = process.env.PORT || 3000;
 
-// 1. Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("🟢 Mongo connected successfully"))
-  .catch(err => console.error("🔴 Database connection error:", err));
-
-// 2. Create HTTP Server (For Render's Health Checks)
-const server = http.createServer((req, res) => {
+// 1. Create a basic HTTP server
+// Render needs this to know your app is "alive" (Health Check)
+const server = createServer((req, res) => {
   res.writeHead(200);
-  res.end("Secure Chat Server is running");
+  res.end('RCS Clone Backend is Running!');
 });
 
-// 3. Initialize WebSocket Server
+// 2. Attach WebSocket server to the HTTP server
 const wss = new WebSocketServer({ server });
 
-// ---------------------------------------------------------
-// 4. THE HEARTBEAT (Fixes ghost users & dropped messages)
-// ---------------------------------------------------------
-const interval = setInterval(() => {
-  wss.clients.forEach((ws) => {
-    // If the client didn't respond to our last ping, they closed the app
-    if (ws.isAlive === false) {
-      console.log("👻 Ghost connection detected. Terminating.");
-      unregisterUser(ws); // Remove them from the active routing map
-      return ws.terminate(); // Kill the dead socket
-    }
-    
-    // Assume dead until they respond with a pong
-    ws.isAlive = false;
-    ws.ping();
-  });
-}, 30000); // Check every 30 seconds
+wss.on('connection', (socket) => {
+  console.log('⚡ New client connected');
 
-// 5. Handle Live Connections
-wss.on("connection", (socket) => {
-  console.log("⚡ New client connected");
-  
-  // Set up the heartbeat for this specific socket
-  socket.isAlive = true;
-  socket.on("pong", () => {
-    socket.isAlive = true; // They responded! Mark as alive.
-  });
-
-  // Handle incoming messages
-  socket.on("message", (data) => {
+  // Route incoming messages to router.js
+  socket.on('message', (message) => {
     try {
-      const event = JSON.parse(data);
-      routeEvent(socket, event);
-    } catch (err) {
-      console.error("⚠️ Invalid JSON received:", err);
+      const parsedData = JSON.parse(message);
+      routeEvent(socket, parsedData);
+    } catch (e) {
+      console.error('❌ Error parsing JSON:', e);
     }
   });
 
-  // Handle clean disconnections
-  socket.on("close", () => {
+  // Handle disconnections
+  socket.on('close', () => {
     unregisterUser(socket);
   });
+
+  // Handle errors
+  socket.on('error', (error) => {
+    console.error('WebSocket Error:', error);
+  });
 });
 
-// Clean up the interval if the whole server shuts down
-wss.on("close", () => {
-  clearInterval(interval);
-});
-
-// 6. Start the hourly background wipe for delivered messages
-startCleanupJob();
-
-// 7. Boot up the server
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// 3. Start listening
+server.listen(port, () => {
+  console.log(`🚀 Server listening on port ${port}`);
 });
