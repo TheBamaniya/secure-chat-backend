@@ -1,5 +1,34 @@
 const users = {};
 
+function normalizeNumber(number) {
+
+    number = number
+        .replace(/\s/g, "")
+        .replace(/-/g, "");
+
+    if (number.startsWith("+91")) {
+
+        number =
+            number.substring(3);
+
+    } else if (
+        number.startsWith("91") &&
+        number.length > 10
+    ) {
+
+        number =
+            number.substring(2);
+    }
+
+    if (number.length > 10) {
+
+        number =
+            number.slice(-10);
+    }
+
+    return number;
+}
+
 module.exports = (io) => {
 
     io.on("connection", (socket) => {
@@ -15,12 +44,22 @@ module.exports = (io) => {
 
             (number) => {
 
-                users[number] =
+                const normalized =
+                    normalizeNumber(
+                        number,
+                    );
+
+                users[normalized] =
                     socket.id;
 
                 console.log(
                     "REGISTERED USER:",
-                    number,
+                    normalized,
+                );
+
+                console.log(
+                    "ALL USERS:",
+                    users,
                 );
             },
         );
@@ -36,16 +75,23 @@ module.exports = (io) => {
                     data,
                 );
 
-                const {
+                const sender =
+                    normalizeNumber(
+                        data.sender,
+                    );
 
-                    sender,
-                    receiver,
-                    text,
-
-                } = data;
+                const receiver =
+                    normalizeNumber(
+                        data.receiver,
+                    );
 
                 const receiverSocket =
                     users[receiver];
+
+                console.log(
+                    "NORMALIZED RECEIVER:",
+                    receiver,
+                );
 
                 console.log(
                     "RECEIVER SOCKET:",
@@ -64,7 +110,9 @@ module.exports = (io) => {
 
                             sender,
                             receiver,
-                            text,
+                            text:
+                                data.text,
+
                             time:
                                 Date.now(),
                         },
