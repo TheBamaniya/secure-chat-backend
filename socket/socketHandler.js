@@ -5,7 +5,7 @@ module.exports = (io) => {
     io.on("connection", (socket) => {
 
         console.log(
-            "User Connected:",
+            "USER CONNECTED:",
             socket.id,
         );
 
@@ -19,7 +19,7 @@ module.exports = (io) => {
                     socket.id;
 
                 console.log(
-                    "Registered:",
+                    "REGISTERED USER:",
                     number,
                 );
             },
@@ -31,6 +31,11 @@ module.exports = (io) => {
 
             (data) => {
 
+                console.log(
+                    "MESSAGE RECEIVED:",
+                    data,
+                );
+
                 const {
 
                     sender,
@@ -41,6 +46,11 @@ module.exports = (io) => {
 
                 const receiverSocket =
                     users[receiver];
+
+                console.log(
+                    "RECEIVER SOCKET:",
+                    receiverSocket,
+                );
 
                 if (receiverSocket) {
 
@@ -59,6 +69,16 @@ module.exports = (io) => {
                                 Date.now(),
                         },
                     );
+
+                    console.log(
+                        "MESSAGE DELIVERED",
+                    );
+
+                } else {
+
+                    console.log(
+                        "USER OFFLINE",
+                    );
                 }
             },
         );
@@ -68,7 +88,7 @@ module.exports = (io) => {
             () => {
 
                 console.log(
-                    "Disconnected:",
+                    "USER DISCONNECTED:",
                     socket.id,
                 );
             },
