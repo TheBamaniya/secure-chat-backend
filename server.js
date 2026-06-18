@@ -35,6 +35,9 @@ const userRoutes =
 const messageRoutes =
     require("./routes/messageRoutes");
 
+const conversationRoutes =
+    require("./routes/conversationRoutes");
+
 const app =
     express();
 
@@ -63,36 +66,41 @@ app.use(express.json());
 
 app.use(
     "/api/auth",
-    authRoutes,
+    authRoutes
 );
 
 app.use(
     "/api/user",
-    userRoutes,
+    userRoutes
 );
 
 app.use(
     "/api/messages",
-    messageRoutes,
+    messageRoutes
+);
+
+app.use(
+    "/api/conversations",
+    conversationRoutes
 );
 
 app.get("/", (_, res) => {
 
     res.send(
-        "SecureChat Backend Running",
+        "SecureChat Backend Running"
     );
 });
 
 socketHandler(io);
 
 mongoose.connect(
-    process.env.MONGO_URI,
+    process.env.MONGO_URI
 )
 
 .then(() => {
 
     console.log(
-        "MongoDB Connected",
+        "MongoDB Connected"
     );
 
 })
@@ -101,7 +109,7 @@ mongoose.connect(
 
     console.error(
         "MongoDB Error:",
-        err,
+        err
     );
 });
 
@@ -115,10 +123,9 @@ server.listen(
     () => {
 
         console.log(
-
-            `Server running on ${PORT}`,
+            `Server running on ${PORT}`
         );
-    },
+    }
 );
 
 process.on(
@@ -128,9 +135,9 @@ process.on(
     (err) => {
 
         console.error(
-            err,
+            err
         );
-    },
+    }
 );
 
 process.on(
@@ -140,7 +147,7 @@ process.on(
     (err) => {
 
         console.error(
-            err,
+            err
         );
-    },
+    }
 );

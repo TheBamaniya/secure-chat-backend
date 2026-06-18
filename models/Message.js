@@ -36,6 +36,8 @@ const MessageSchema =
         },
 
         /*
+        MESSAGE TYPE
+
         text
         image
         video
@@ -47,6 +49,21 @@ const MessageSchema =
         messageType: {
 
             type: String,
+
+            enum: [
+
+                "text",
+
+                "image",
+
+                "video",
+
+                "pdf",
+
+                "file",
+
+                "audio",
+            ],
 
             default: "text",
         },
@@ -92,6 +109,34 @@ const MessageSchema =
             type: Number,
 
             default: 0,
+        },
+
+        /*
+        GOOGLE DRIVE FILE ID
+
+        Actual file lives in
+        user's Google Drive.
+        */
+
+        driveFileId: {
+
+            type: String,
+
+            default: "",
+        },
+
+        /*
+        ENCRYPTION VERSION
+
+        Allows future upgrades
+        without breaking old backups.
+        */
+
+        encryptionVersion: {
+
+            type: Number,
+
+            default: 1,
         },
 
         /*
@@ -147,7 +192,7 @@ const MessageSchema =
         },
 
         /*
-        DELETE EVERYONE
+        DELETE FOR EVERYONE
         */
 
         deletedForEveryone: {
@@ -164,17 +209,19 @@ const MessageSchema =
         deletedFor: [
 
             {
+
                 type: String,
             },
         ],
 
         /*
-        STARRED MESSAGE
+        STARRED MESSAGES
         */
 
         starredBy: [
 
             {
+
                 type: String,
             },
         ],
@@ -222,6 +269,7 @@ const MessageSchema =
         deliveredTo: [
 
             {
+
                 type: String,
             },
         ],
@@ -229,21 +277,10 @@ const MessageSchema =
         seenBy: [
 
             {
+
                 type: String,
             },
         ],
-
-        /*
-        MESSAGE INFO
-        */
-
-        sentAt: {
-
-            type: Date,
-
-            default:
-                Date.now,
-        },
 
         deliveredAt: {
 
@@ -256,8 +293,16 @@ const MessageSchema =
         },
 
         /*
-        TIMESTAMP
+        MESSAGE TIMESTAMPS
         */
+
+        sentAt: {
+
+            type: Date,
+
+            default:
+                Date.now,
+        },
 
         timestamp: {
 
