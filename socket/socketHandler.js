@@ -8,10 +8,20 @@ const generateMessageId =
         "../utils/generateMessageId"
     );
 
+const {
+
+    encryptMessage,
+
+    decryptMessage,
+
+} = require(
+    "../utils/encryption"
+);
+
 const users = {};
 
 function normalizeNumber(
-    number,
+    number
 ) {
 
     number =
@@ -21,7 +31,7 @@ function normalizeNumber(
 
     if (
         number.startsWith(
-            "+91",
+            "+91"
         )
     ) {
 
@@ -31,12 +41,11 @@ function normalizeNumber(
     } else if (
 
         number.startsWith(
-            "91",
-        )
-
-        &&
+            "91"
+        ) &&
 
         number.length > 10
+
     ) {
 
         number =
@@ -54,7 +63,8 @@ function normalizeNumber(
     return number;
 }
 
-module.exports = (io) => {
+module.exports =
+(io) => {
 
     io.on(
 
@@ -66,20 +76,19 @@ module.exports = (io) => {
 
                 "USER CONNECTED:",
 
-                socket.id,
+                socket.id
             );
 
             socket.on(
 
                 "register",
 
-                (
-                    number,
-                ) => {
+                (number) => {
 
                     const normalized =
+
                         normalizeNumber(
-                            number,
+                            number
                         );
 
                     users[
@@ -91,35 +100,43 @@ module.exports = (io) => {
 
                         "REGISTERED:",
 
-                        normalized,
+                        normalized
                     );
-                },
+                }
             );
 
             socket.on(
 
                 "send_message",
 
-                async (
-                    data,
-                ) => {
+                async (data) => {
 
                     try {
 
                         const sender =
+
                             normalizeNumber(
-                                data.sender,
+                                data.sender
                             );
 
                         const receiver =
+
                             normalizeNumber(
-                                data.receiver,
+                                data.receiver
                             );
 
                         const messageId =
+
                             generateMessageId();
 
+                        const encryptedText =
+
+                            encryptMessage(
+                                data.text
+                            );
+
                         const newMessage =
+
                             await Message.create({
 
                                 messageId,
@@ -129,9 +146,9 @@ module.exports = (io) => {
                                 receiver,
 
                                 encryptedContent:
-                                    data.text,
+                                    encryptedText,
 
-                                type:
+                                messageType:
                                     "text",
 
                                 status:
@@ -139,6 +156,7 @@ module.exports = (io) => {
                             });
 
                         const receiverSocket =
+
                             users[
                                 receiver
                             ];
@@ -149,7 +167,7 @@ module.exports = (io) => {
 
                             io.to(
 
-                                receiverSocket,
+                                receiverSocket
 
                             ).emit(
 
@@ -172,7 +190,7 @@ module.exports = (io) => {
                                     timestamp:
                                         newMessage
                                             .timestamp,
-                                },
+                                }
                             );
 
                             await Message
@@ -187,7 +205,10 @@ module.exports = (io) => {
 
                                         status:
                                             "delivered",
-                                    },
+
+                                        deliveredAt:
+                                            new Date(),
+                                    }
                                 );
                         }
 
@@ -196,10 +217,10 @@ module.exports = (io) => {
                     ) {
 
                         console.error(
-                            error,
+                            error
                         );
                     }
-                },
+                }
             );
 
             socket.on(
@@ -212,10 +233,10 @@ module.exports = (io) => {
 
                         "USER DISCONNECTED:",
 
-                        socket.id,
+                        socket.id
                     );
-                },
+                }
             );
-        },
+        }
     );
 };

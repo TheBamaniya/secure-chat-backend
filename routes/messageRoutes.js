@@ -9,12 +9,16 @@ const auth =
         "../middleware/authMiddleware"
     );
 
+const {
+
+    decryptMessage,
+
+} = require(
+    "../utils/encryption"
+);
+
 const router =
     express.Router();
-
-/*
-GET CHAT HISTORY
-*/
 
 router.get(
 
@@ -35,19 +39,25 @@ router.get(
                     .receiver;
 
             const messages =
+
                 await Message.find({
 
                     $or: [
 
                         {
-                            sender: me,
+
+                            sender:
+                                me,
+
                             receiver:
                                 receiver,
                         },
 
                         {
+
                             sender:
                                 receiver,
+
                             receiver:
                                 me,
                         },
@@ -55,16 +65,52 @@ router.get(
                 })
 
                 .sort({
-                    timestamp: 1,
+
+                    timestamp:
+                        1,
                 })
 
                 .limit(500);
+
+            const decryptedMessages =
+
+                messages.map(
+
+                    (msg) => {
+
+                        let text = "";
+
+                        try {
+
+                            text =
+
+                                decryptMessage(
+
+                                    msg
+                                    .encryptedContent
+                                );
+
+                        } catch {
+
+                            text = "";
+                        }
+
+                        return {
+
+                            ...msg.toObject(),
+
+                            encryptedContent:
+                                text,
+                        };
+                    }
+                );
 
             return res.json({
 
                 success: true,
 
-                messages,
+                messages:
+                    decryptedMessages,
             });
 
         } catch (
@@ -72,7 +118,7 @@ router.get(
         ) {
 
             console.error(
-                error,
+                error
             );
 
             return res
@@ -86,7 +132,7 @@ router.get(
                         "Unable to load messages",
                 });
         }
-    },
+    }
 );
 
 module.exports =
