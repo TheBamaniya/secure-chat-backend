@@ -1,104 +1,113 @@
 const mongoose =
-require("mongoose");
+    require("mongoose");
 
 const MessageSchema =
-new mongoose.Schema({
+    new mongoose.Schema({
 
-    messageId: {
+        messageId: {
 
-        type: String,
-        required: true,
-        unique: true,
-    },
+            type: String,
 
-    sender: {
+            required: true,
 
-        type: String,
-        required: true,
-    },
-
-    receiver: {
-
-        type: String,
-        required: true,
-    },
-
-    type: {
-
-        type: String,
-
-        enum: [
-            "text",
-            "image",
-            "video",
-            "pdf",
-            "file",
-        ],
-
-        default: "text",
-    },
-
-    encryptedContent: {
-
-        type: String,
-        default: "",
-    },
-
-    replyTo: {
-
-        type: String,
-        default: "",
-    },
-
-    forwarded: {
-
-        type: Boolean,
-        default: false,
-    },
-
-    edited: {
-
-        type: Boolean,
-        default: false,
-    },
-
-    deleted: {
-
-        type: Boolean,
-        default: false,
-    },
-
-    reactions: [
-
-        {
-
-            user: String,
-            emoji: String,
+            unique: true,
         },
-    ],
 
-    status: {
+        sender: {
 
-        type: String,
+            type: String,
 
-        enum: [
-            "sent",
-            "delivered",
-            "seen",
+            required: true,
+        },
+
+        receiver: {
+
+            type: String,
+
+            required: true,
+        },
+
+        type: {
+
+            type: String,
+
+            default: "text",
+        },
+
+        encryptedContent: {
+
+            type: String,
+
+            default: "",
+        },
+
+        status: {
+
+            type: String,
+
+            enum: [
+
+                "sent",
+
+                "delivered",
+
+                "seen",
+            ],
+
+            default: "sent",
+        },
+
+        edited: {
+
+            type: Boolean,
+
+            default: false,
+        },
+
+        deleted: {
+
+            type: Boolean,
+
+            default: false,
+        },
+
+        reactions: [
+
+            {
+
+                user:
+                    String,
+
+                emoji:
+                    String,
+            },
         ],
 
-        default: "sent",
-    },
+        replyTo: {
 
-    timestamp: {
+            type: String,
 
-        type: Date,
-        default: Date.now,
-    },
-});
+            default: "",
+        },
+
+        forwarded: {
+
+            type: Boolean,
+
+            default: false,
+        },
+
+        timestamp: {
+
+            type: Date,
+
+            default:
+                Date.now,
+        },
+    });
 
 module.exports =
-mongoose.model(
-    "Message",
-    MessageSchema,
-);
+    mongoose.model(
+        "Message",
+        MessageSchema,
+    );

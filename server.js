@@ -32,6 +32,9 @@ const authRoutes =
 const userRoutes =
     require("./routes/userRoutes");
 
+const messageRoutes =
+    require("./routes/messageRoutes");
+
 const app =
     express();
 
@@ -54,17 +57,9 @@ const io =
         },
     });
 
-/*
-MIDDLEWARE
-*/
-
 app.use(cors());
 
 app.use(express.json());
-
-/*
-API ROUTES
-*/
 
 app.use(
     "/api/auth",
@@ -76,53 +71,39 @@ app.use(
     userRoutes,
 );
 
-/*
-TEST ROUTE
-*/
-
-app.get(
-
-    "/",
-
-    (_, res) => {
-
-        res.send(
-            "SecureChat Backend Running",
-        );
-    },
+app.use(
+    "/api/messages",
+    messageRoutes,
 );
 
-/*
-SOCKETS
-*/
+app.get("/", (_, res) => {
+
+    res.send(
+        "SecureChat Backend Running",
+    );
+});
 
 socketHandler(io);
 
-/*
-MONGODB
-*/
-
 mongoose.connect(
-
     process.env.MONGO_URI,
+)
 
-).then(() => {
+.then(() => {
 
     console.log(
         "MongoDB Connected",
     );
 
-}).catch((err) => {
+})
+
+.catch((err) => {
 
     console.error(
         "MongoDB Error:",
         err,
     );
 });
-
-/*
-START SERVER
-*/
 
 const PORT =
     process.env.PORT || 1000;
@@ -140,10 +121,6 @@ server.listen(
     },
 );
 
-/*
-ERROR HANDLING
-*/
-
 process.on(
 
     "uncaughtException",
@@ -151,9 +128,6 @@ process.on(
     (err) => {
 
         console.error(
-
-            "Uncaught Exception:",
-
             err,
         );
     },
@@ -166,9 +140,6 @@ process.on(
     (err) => {
 
         console.error(
-
-            "Unhandled Rejection:",
-
             err,
         );
     },

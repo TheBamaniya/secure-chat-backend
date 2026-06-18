@@ -1,18 +1,41 @@
+const Message =
+    require(
+        "../models/Message"
+    );
+
+const generateMessageId =
+    require(
+        "../utils/generateMessageId"
+    );
+
 const users = {};
 
-function normalizeNumber(number) {
+function normalizeNumber(
+    number,
+) {
 
-    number = number
-        .replace(/\s/g, "")
-        .replace(/-/g, "");
+    number =
+        number
+            .replace(/\s/g, "")
+            .replace(/-/g, "");
 
-    if (number.startsWith("+91")) {
+    if (
+        number.startsWith(
+            "+91",
+        )
+    ) {
 
         number =
             number.substring(3);
 
     } else if (
-        number.startsWith("91") &&
+
+        number.startsWith(
+            "91",
+        )
+
+        &&
+
         number.length > 10
     ) {
 
@@ -20,7 +43,9 @@ function normalizeNumber(number) {
             number.substring(2);
     }
 
-    if (number.length > 10) {
+    if (
+        number.length > 10
+    ) {
 
         number =
             number.slice(-10);
@@ -31,115 +56,166 @@ function normalizeNumber(number) {
 
 module.exports = (io) => {
 
-    io.on("connection", (socket) => {
+    io.on(
 
-        console.log(
-            "USER CONNECTED:",
-            socket.id,
-        );
+        "connection",
 
-        socket.on(
+        (socket) => {
 
-            "register",
+            console.log(
 
-            (number) => {
+                "USER CONNECTED:",
 
-                const normalized =
-                    normalizeNumber(
-                        number,
+                socket.id,
+            );
+
+            socket.on(
+
+                "register",
+
+                (
+                    number,
+                ) => {
+
+                    const normalized =
+                        normalizeNumber(
+                            number,
+                        );
+
+                    users[
+                        normalized
+                    ] =
+                        socket.id;
+
+                    console.log(
+
+                        "REGISTERED:",
+
+                        normalized,
                     );
+                },
+            );
 
-                users[normalized] =
-                    socket.id;
+            socket.on(
 
-                console.log(
-                    "REGISTERED USER:",
-                    normalized,
-                );
+                "send_message",
 
-                console.log(
-                    "ALL USERS:",
-                    users,
-                );
-            },
-        );
-
-        socket.on(
-
-            "send_message",
-
-            (data) => {
-
-                console.log(
-                    "MESSAGE RECEIVED:",
+                async (
                     data,
-                );
+                ) => {
 
-                const sender =
-                    normalizeNumber(
-                        data.sender,
-                    );
+                    try {
 
-                const receiver =
-                    normalizeNumber(
-                        data.receiver,
-                    );
+                        const sender =
+                            normalizeNumber(
+                                data.sender,
+                            );
 
-                const receiverSocket =
-                    users[receiver];
+                        const receiver =
+                            normalizeNumber(
+                                data.receiver,
+                            );
 
-                console.log(
-                    "NORMALIZED RECEIVER:",
-                    receiver,
-                );
+                        const messageId =
+                            generateMessageId();
 
-                console.log(
-                    "RECEIVER SOCKET:",
-                    receiverSocket,
-                );
+                        const newMessage =
+                            await Message.create({
 
-                if (receiverSocket) {
+                                messageId,
 
-                    io.to(
-                        receiverSocket,
-                    ).emit(
+                                sender,
 
-                        "receive_message",
+                                receiver,
 
-                        {
+                                encryptedContent:
+                                    data.text,
 
-                            sender,
-                            receiver,
-                            text:
-                                data.text,
+                                type:
+                                    "text",
 
-                            time:
-                                Date.now(),
-                        },
-                    );
+                                status:
+                                    "sent",
+                            });
+
+                        const receiverSocket =
+                            users[
+                                receiver
+                            ];
+
+                        if (
+                            receiverSocket
+                        ) {
+
+                            io.to(
+
+                                receiverSocket,
+
+                            ).emit(
+
+                                "receive_message",
+
+                                {
+
+                                    messageId,
+
+                                    sender,
+
+                                    receiver,
+
+                                    text:
+                                        data.text,
+
+                                    status:
+                                        "delivered",
+
+                                    timestamp:
+                                        newMessage
+                                            .timestamp,
+                                },
+                            );
+
+                            await Message
+                                .updateOne(
+
+                                    {
+
+                                        messageId,
+                                    },
+
+                                    {
+
+                                        status:
+                                            "delivered",
+                                    },
+                                );
+                        }
+
+                    } catch (
+                        error
+                    ) {
+
+                        console.error(
+                            error,
+                        );
+                    }
+                },
+            );
+
+            socket.on(
+
+                "disconnect",
+
+                () => {
 
                     console.log(
-                        "MESSAGE DELIVERED",
+
+                        "USER DISCONNECTED:",
+
+                        socket.id,
                     );
-
-                } else {
-
-                    console.log(
-                        "USER OFFLINE",
-                    );
-                }
-            },
-        );
-
-        socket.on(
-            "disconnect",
-            () => {
-
-                console.log(
-                    "USER DISCONNECTED:",
-                    socket.id,
-                );
-            },
-        );
-    });
+                },
+            );
+        },
+    );
 };
