@@ -1,34 +1,32 @@
-const express =
-    require("express");
+const express = require("express");
 
-const Message =
-    require("../models/Message");
+const Message = require("../models/Message");
 
-const auth =
-    require(
-        "../middleware/authMiddleware"
-    );
+const auth = require(
+    "../middleware/authMiddleware"
+);
 
-const router =
-    express.Router();
+const {
+    decryptMessage
+} = require(
+    "../utils/encryption"
+);
+
+const router = express.Router();
 
 /*
 GET CONVERSATIONS
 */
 
 router.get(
-
     "/",
-
     auth,
-
     async (req, res) => {
 
         try {
 
             const me =
-                req.user
-                    .phoneNumber;
+                req.user.phoneNumber;
 
             const messages =
                 await Message.find({
@@ -36,40 +34,53 @@ router.get(
                     $or: [
 
                         {
-                            sender: me,
+                            sender: me
                         },
 
                         {
-                            receiver: me,
-                        },
-                    ],
+                            receiver: me
+                        }
+                    ]
                 })
 
                 .sort({
-
-                    timestamp: -1,
+                    timestamp: -1
                 });
 
             const map =
                 new Map();
 
             messages.forEach(
-
                 (msg) => {
 
                     const otherUser =
 
                         msg.sender === me
 
-                            ? msg.receiver
+                        ? msg.receiver
 
-                            : msg.sender;
+                        : msg.sender;
 
                     if (
                         !map.has(
                             otherUser
                         )
                     ) {
+
+                        let preview = "";
+
+                        try {
+
+                            preview =
+                                decryptMessage(
+                                    msg.encryptedContent
+                                );
+
+                        } catch {
+
+                            preview =
+                                "[Encrypted]";
+                        }
 
                         map.set(
 
@@ -81,10 +92,13 @@ router.get(
                                     otherUser,
 
                                 lastMessage:
-                                    msg.encryptedContent,
+                                    preview,
 
                                 timestamp:
                                     msg.timestamp,
+
+                                status:
+                                    msg.status
                             }
                         );
                     }
@@ -99,7 +113,7 @@ router.get(
 
                     Array.from(
                         map.values()
-                    ),
+                    )
             });
 
         } catch (error) {
@@ -108,18 +122,17 @@ router.get(
                 error
             );
 
-            return res.status(500)
+            return res
+                .status(500)
                 .json({
 
-                    success:
-                        false,
+                    success: false,
 
                     message:
-                        "Unable to load conversations",
+                        "Unable to load conversations"
                 });
         }
     }
 );
 
-module.exports =
-    router;
+module.exports = router;
