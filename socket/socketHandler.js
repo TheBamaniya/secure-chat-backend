@@ -12,8 +12,6 @@ const {
 
     encryptMessage,
 
-    decryptMessage,
-
 } = require(
     "../utils/encryption"
 );
@@ -45,7 +43,6 @@ function normalizeNumber(
         ) &&
 
         number.length > 10
-
     ) {
 
         number =
@@ -73,9 +70,7 @@ module.exports =
         (socket) => {
 
             console.log(
-
-                "USER CONNECTED:",
-
+                "CONNECTED:",
                 socket.id
             );
 
@@ -86,15 +81,27 @@ module.exports =
                 (number) => {
 
                     const normalized =
-
                         normalizeNumber(
                             number
                         );
 
                     users[
                         normalized
-                    ] =
-                        socket.id;
+                    ] = {
+
+                        socketId:
+                            socket.id,
+
+                        online:
+                            true,
+                    };
+
+                    socket.broadcast.emit(
+
+                        "user_online",
+
+                        normalized
+                    );
 
                     console.log(
 
@@ -107,6 +114,135 @@ module.exports =
 
             socket.on(
 
+                "typing",
+
+                (data) => {
+
+                    const receiver =
+                        users[
+                            data.receiver
+                        ];
+
+                    if (
+                        receiver
+                    ) {
+
+                        io.to(
+
+                            receiver.socketId
+
+                        ).emit(
+
+                            "typing",
+
+                            {
+
+                                sender:
+                                    data.sender,
+                            }
+                        );
+                    }
+                }
+            );
+
+            socket.on(
+
+                "stop_typing",
+
+                (data) => {
+
+                    const receiver =
+                        users[
+                            data.receiver
+                        ];
+
+                    if (
+                        receiver
+                    ) {
+
+                        io.to(
+
+                            receiver.socketId
+
+                        ).emit(
+
+                            "stop_typing",
+
+                            {
+
+                                sender:
+                                    data.sender,
+                            }
+                        );
+                    }
+                }
+            );
+
+            socket.on(
+
+                "message_seen",
+
+                async (data) => {
+
+                    try {
+
+                        await Message
+                            .updateOne(
+
+                                {
+
+                                    messageId:
+                                        data.messageId,
+                                },
+
+                                {
+
+                                    status:
+                                        "seen",
+
+                                    seenAt:
+                                        new Date(),
+                                }
+                            );
+
+                        const sender =
+                            users[
+                                data.sender
+                            ];
+
+                        if (
+                            sender
+                        ) {
+
+                            io.to(
+
+                                sender.socketId
+
+                            ).emit(
+
+                                "message_seen",
+
+                                {
+
+                                    messageId:
+                                        data.messageId,
+                                }
+                            );
+                        }
+
+                    } catch (
+                        error
+                    ) {
+
+                        console.error(
+                            error
+                        );
+                    }
+                }
+            );
+
+            socket.on(
+
                 "send_message",
 
                 async (data) => {
@@ -114,29 +250,24 @@ module.exports =
                     try {
 
                         const sender =
-
                             normalizeNumber(
                                 data.sender
                             );
 
                         const receiver =
-
                             normalizeNumber(
                                 data.receiver
                             );
 
                         const messageId =
-
                             generateMessageId();
 
-                        const encryptedText =
-
+                        const encrypted =
                             encryptMessage(
                                 data.text
                             );
 
                         const newMessage =
-
                             await Message.create({
 
                                 messageId,
@@ -146,7 +277,7 @@ module.exports =
                                 receiver,
 
                                 encryptedContent:
-                                    encryptedText,
+                                    encrypted,
 
                                 messageType:
                                     "text",
@@ -155,19 +286,19 @@ module.exports =
                                     "sent",
                             });
 
-                        const receiverSocket =
-
+                        const receiverUser =
                             users[
                                 receiver
                             ];
 
                         if (
-                            receiverSocket
+                            receiverUser
                         ) {
 
                             io.to(
 
-                                receiverSocket
+                                receiverUser
+                                    .socketId
 
                             ).emit(
 
@@ -188,8 +319,7 @@ module.exports =
                                         "delivered",
 
                                     timestamp:
-                                        newMessage
-                                            .timestamp,
+                                        newMessage.timestamp,
                                 }
                             );
 
@@ -229,10 +359,41 @@ module.exports =
 
                 () => {
 
+                    for (
+
+                        const number
+                        in users
+
+                    ) {
+
+                        if (
+
+                            users[number]
+                                .socketId
+
+                            ===
+
+                            socket.id
+
+                        ) {
+
+                            delete users[
+                                number
+                            ];
+
+                            socket.broadcast.emit(
+
+                                "user_offline",
+
+                                number
+                            );
+
+                            break;
+                        }
+                    }
+
                     console.log(
-
-                        "USER DISCONNECTED:",
-
+                        "DISCONNECTED:",
                         socket.id
                     );
                 }
