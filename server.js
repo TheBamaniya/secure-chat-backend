@@ -26,6 +26,12 @@ const { Server } =
 const socketHandler =
     require("./socket/socketHandler");
 
+const authRoutes =
+    require("./routes/authRoutes");
+
+const userRoutes =
+    require("./routes/userRoutes");
+
 const app =
     express();
 
@@ -48,23 +54,54 @@ const io =
         },
     });
 
-// MIDDLEWARE
+/*
+MIDDLEWARE
+*/
+
 app.use(cors());
 
 app.use(express.json());
 
-// TEST ROUTE
-app.get("/", (_, res) => {
+/*
+API ROUTES
+*/
 
-    res.send(
-        "SecureChat Backend Running",
-    );
-});
+app.use(
+    "/api/auth",
+    authRoutes,
+);
 
-// SOCKET HANDLER
+app.use(
+    "/api/user",
+    userRoutes,
+);
+
+/*
+TEST ROUTE
+*/
+
+app.get(
+
+    "/",
+
+    (_, res) => {
+
+        res.send(
+            "SecureChat Backend Running",
+        );
+    },
+);
+
+/*
+SOCKETS
+*/
+
 socketHandler(io);
 
-// MONGODB
+/*
+MONGODB
+*/
+
 mongoose.connect(
 
     process.env.MONGO_URI,
@@ -83,18 +120,30 @@ mongoose.connect(
     );
 });
 
-// START SERVER
+/*
+START SERVER
+*/
+
 const PORT =
     process.env.PORT || 1000;
 
-server.listen(PORT, () => {
+server.listen(
 
-    console.log(
-        `Server running on ${PORT}`,
-    );
-});
+    PORT,
 
-// ERROR HANDLING
+    () => {
+
+        console.log(
+
+            `Server running on ${PORT}`,
+        );
+    },
+);
+
+/*
+ERROR HANDLING
+*/
+
 process.on(
 
     "uncaughtException",
@@ -102,7 +151,9 @@ process.on(
     (err) => {
 
         console.error(
+
             "Uncaught Exception:",
+
             err,
         );
     },
@@ -115,7 +166,9 @@ process.on(
     (err) => {
 
         console.error(
+
             "Unhandled Rejection:",
+
             err,
         );
     },
