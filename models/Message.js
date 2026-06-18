@@ -4,6 +4,10 @@ const mongoose =
 const MessageSchema =
     new mongoose.Schema({
 
+        /*
+        UNIQUE MESSAGE ID
+        */
+
         messageId: {
 
             type: String,
@@ -12,6 +16,10 @@ const MessageSchema =
 
             unique: true,
         },
+
+        /*
+        BASIC INFO
+        */
 
         sender: {
 
@@ -27,12 +35,25 @@ const MessageSchema =
             required: true,
         },
 
-        type: {
+        /*
+        text
+        image
+        video
+        pdf
+        file
+        audio
+        */
+
+        messageType: {
 
             type: String,
 
             default: "text",
         },
+
+        /*
+        ENCRYPTED CONTENT
+        */
 
         encryptedContent: {
 
@@ -40,6 +61,147 @@ const MessageSchema =
 
             default: "",
         },
+
+        /*
+        MEDIA INFO
+        */
+
+        mediaId: {
+
+            type: String,
+
+            default: "",
+        },
+
+        thumbnail: {
+
+            type: String,
+
+            default: "",
+        },
+
+        fileName: {
+
+            type: String,
+
+            default: "",
+        },
+
+        fileSize: {
+
+            type: Number,
+
+            default: 0,
+        },
+
+        /*
+        REPLY FEATURE
+        */
+
+        replyTo: {
+
+            type: String,
+
+            default: "",
+        },
+
+        replyPreview: {
+
+            type: String,
+
+            default: "",
+        },
+
+        /*
+        FORWARD FEATURE
+        */
+
+        forwarded: {
+
+            type: Boolean,
+
+            default: false,
+        },
+
+        forwardedFrom: {
+
+            type: String,
+
+            default: "",
+        },
+
+        /*
+        EDIT FEATURE
+        */
+
+        edited: {
+
+            type: Boolean,
+
+            default: false,
+        },
+
+        editedAt: {
+
+            type: Date,
+        },
+
+        /*
+        DELETE EVERYONE
+        */
+
+        deletedForEveryone: {
+
+            type: Boolean,
+
+            default: false,
+        },
+
+        /*
+        DELETE FOR ME
+        */
+
+        deletedFor: [
+
+            {
+                type: String,
+            },
+        ],
+
+        /*
+        STARRED MESSAGE
+        */
+
+        starredBy: [
+
+            {
+                type: String,
+            },
+        ],
+
+        /*
+        REACTIONS
+        */
+
+        reactions: [
+
+            {
+
+                user: {
+
+                    type: String,
+                },
+
+                emoji: {
+
+                    type: String,
+                },
+            },
+        ],
+
+        /*
+        DELIVERY STATUS
+        */
 
         status: {
 
@@ -57,45 +219,45 @@ const MessageSchema =
             default: "sent",
         },
 
-        edited: {
-
-            type: Boolean,
-
-            default: false,
-        },
-
-        deleted: {
-
-            type: Boolean,
-
-            default: false,
-        },
-
-        reactions: [
+        deliveredTo: [
 
             {
-
-                user:
-                    String,
-
-                emoji:
-                    String,
+                type: String,
             },
         ],
 
-        replyTo: {
+        seenBy: [
 
-            type: String,
+            {
+                type: String,
+            },
+        ],
 
-            default: "",
+        /*
+        MESSAGE INFO
+        */
+
+        sentAt: {
+
+            type: Date,
+
+            default:
+                Date.now,
         },
 
-        forwarded: {
+        deliveredAt: {
 
-            type: Boolean,
-
-            default: false,
+            type: Date,
         },
+
+        seenAt: {
+
+            type: Date,
+        },
+
+        /*
+        TIMESTAMP
+        */
 
         timestamp: {
 
