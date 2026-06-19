@@ -8,22 +8,18 @@ const generateMessageId =
         "../utils/generateMessageId"
     );
 
-const {
-
-    encryptMessage,
-
-} = require(
-    "../utils/encryption"
-);
-
 const users = {};
 
 function normalizeNumber(
     number
 ) {
 
+    if (!number) {
+        return "";
+    }
+
     number =
-        number
+        String(number)
             .replace(/\s/g, "")
             .replace(/-/g, "");
 
@@ -74,6 +70,10 @@ module.exports =
                 socket.id
             );
 
+            /*
+            REGISTER
+            */
+
             socket.on(
 
                 "register",
@@ -112,6 +112,10 @@ module.exports =
                 }
             );
 
+            /*
+            TYPING
+            */
+
             socket.on(
 
                 "typing",
@@ -120,7 +124,9 @@ module.exports =
 
                     const receiver =
                         users[
-                            data.receiver
+                            normalizeNumber(
+                                data.receiver
+                            )
                         ];
 
                     if (
@@ -153,7 +159,9 @@ module.exports =
 
                     const receiver =
                         users[
-                            data.receiver
+                            normalizeNumber(
+                                data.receiver
+                            )
                         ];
 
                     if (
@@ -178,6 +186,10 @@ module.exports =
                 }
             );
 
+            /*
+            MESSAGE SEEN
+            */
+
             socket.on(
 
                 "message_seen",
@@ -186,28 +198,27 @@ module.exports =
 
                     try {
 
-                        await Message
-                            .updateOne(
+                        await Message.updateOne(
 
-                                {
+                            {
+                                messageId:
+                                    data.messageId,
+                            },
 
-                                    messageId:
-                                        data.messageId,
-                                },
+                            {
+                                status:
+                                    "seen",
 
-                                {
-
-                                    status:
-                                        "seen",
-
-                                    seenAt:
-                                        new Date(),
-                                }
-                            );
+                                seenAt:
+                                    new Date(),
+                            }
+                        );
 
                         const sender =
                             users[
-                                data.sender
+                                normalizeNumber(
+                                    data.sender
+                                )
                             ];
 
                         if (
@@ -241,6 +252,83 @@ module.exports =
                 }
             );
 
+            /*
+            LIVE REACTION
+            */
+
+            socket.on(
+
+                "message_reaction",
+
+                (data) => {
+
+                    const sender =
+                        users[
+                            normalizeNumber(
+                                data.sender
+                            )
+                        ];
+
+                    const receiver =
+                        users[
+                            normalizeNumber(
+                                data.receiver
+                            )
+                        ];
+
+                    const payload = {
+
+                        messageId:
+                            data.messageId,
+
+                        emoji:
+                            data.emoji,
+
+                        reactedBy:
+                            data.reactedBy,
+
+                        action:
+                            data.action,
+                    };
+
+                    if (
+                        sender
+                    ) {
+
+                        io.to(
+
+                            sender.socketId
+
+                        ).emit(
+
+                            "message_reaction",
+
+                            payload
+                        );
+                    }
+
+                    if (
+                        receiver
+                    ) {
+
+                        io.to(
+
+                            receiver.socketId
+
+                        ).emit(
+
+                            "message_reaction",
+
+                            payload
+                        );
+                    }
+                }
+            );
+
+            /*
+            SEND MESSAGE
+            */
+
             socket.on(
 
                 "send_message",
@@ -262,12 +350,7 @@ module.exports =
                         const messageId =
                             generateMessageId();
 
-                        const encrypted =
-                            encryptMessage(
-                                data.text
-                            );
-
-                        const newMessage =
+                        const metadata =
                             await Message.create({
 
                                 messageId,
@@ -276,11 +359,44 @@ module.exports =
 
                                 receiver,
 
-                                encryptedContent:
-                                    encrypted,
-
                                 messageType:
+                                    data.messageType ||
                                     "text",
+
+                                localMessageId:
+                                    data.localMessageId ||
+                                    "",
+
+                                replyTo:
+                                    data.replyTo ||
+                                    "",
+
+                                replyPreview:
+                                    data.replyPreview ||
+                                    "",
+
+                                thumbnail:
+                                    data.thumbnail ||
+                                    "",
+
+                                fileName:
+                                    data.fileName ||
+                                    "",
+
+                                fileSize:
+                                    data.fileSize ||
+                                    0,
+
+                                driveFileId:
+                                    data.driveFileId ||
+                                    "",
+
+                                backupHash:
+                                    data.backupHash ||
+                                    "",
+
+                                syncedToDrive:
+                                    false,
 
                                 status:
                                     "sent",
@@ -312,34 +428,55 @@ module.exports =
 
                                     receiver,
 
-                                    text:
-                                        data.text,
+                                    localMessageId:
+                                        data.localMessageId,
+
+                                    messageType:
+                                        data.messageType ||
+                                        "text",
+
+                                    replyTo:
+                                        data.replyTo ||
+                                        "",
+
+                                    replyPreview:
+                                        data.replyPreview ||
+                                        "",
+
+                                    thumbnail:
+                                        data.thumbnail ||
+                                        "",
+
+                                    fileName:
+                                        data.fileName ||
+                                        "",
+
+                                    fileSize:
+                                        data.fileSize ||
+                                        0,
+
+                                    timestamp:
+                                        metadata.timestamp,
 
                                     status:
                                         "delivered",
-
-                                    timestamp:
-                                        newMessage.timestamp,
                                 }
                             );
 
-                            await Message
-                                .updateOne(
+                            await Message.updateOne(
 
-                                    {
+                                {
+                                    messageId,
+                                },
 
-                                        messageId,
-                                    },
+                                {
+                                    status:
+                                        "delivered",
 
-                                    {
-
-                                        status:
-                                            "delivered",
-
-                                        deliveredAt:
-                                            new Date(),
-                                    }
-                                );
+                                    deliveredAt:
+                                        new Date(),
+                                }
+                            );
                         }
 
                     } catch (
@@ -352,6 +489,10 @@ module.exports =
                     }
                 }
             );
+
+            /*
+            DISCONNECT
+            */
 
             socket.on(
 

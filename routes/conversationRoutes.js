@@ -1,56 +1,67 @@
-const express = require("express");
+const express =
+    require("express");
 
-const Message = require("../models/Message");
+const Message =
+    require("../models/Message");
 
-const auth = require(
-    "../middleware/authMiddleware"
-);
+const auth =
+    require(
+        "../middleware/authMiddleware"
+    );
 
-const {
-    decryptMessage
-} = require(
-    "../utils/encryption"
-);
-
-const router = express.Router();
+const router =
+    express.Router();
 
 /*
 GET CONVERSATIONS
+
+SERVER STORES
+METADATA ONLY
 */
 
 router.get(
+
     "/",
+
     auth,
+
     async (req, res) => {
 
         try {
 
             const me =
-                req.user.phoneNumber;
+                req.user
+                    .phoneNumber;
 
             const messages =
+
                 await Message.find({
 
                     $or: [
 
                         {
-                            sender: me
+                            sender:
+                                me
                         },
 
                         {
-                            receiver: me
+                            receiver:
+                                me
                         }
                     ]
                 })
 
                 .sort({
-                    timestamp: -1
+
+                    timestamp:
+                        -1
                 });
 
             const map =
                 new Map();
 
             messages.forEach(
+
                 (msg) => {
 
                     const otherUser =
@@ -67,21 +78,6 @@ router.get(
                         )
                     ) {
 
-                        let preview = "";
-
-                        try {
-
-                            preview =
-                                decryptMessage(
-                                    msg.encryptedContent
-                                );
-
-                        } catch {
-
-                            preview =
-                                "[Encrypted]";
-                        }
-
                         map.set(
 
                             otherUser,
@@ -91,14 +87,29 @@ router.get(
                                 phoneNumber:
                                     otherUser,
 
-                                lastMessage:
-                                    preview,
+                                messageType:
+                                    msg.messageType,
 
                                 timestamp:
                                     msg.timestamp,
 
                                 status:
-                                    msg.status
+                                    msg.status,
+
+                                thumbnail:
+                                    msg.thumbnail ||
+
+                                    "",
+
+                                replyTo:
+                                    msg.replyTo ||
+
+                                    "",
+
+                                deletedForEveryone:
+
+                                    msg.deletedForEveryone ||
+                                    false,
                             }
                         );
                     }
@@ -113,10 +124,12 @@ router.get(
 
                     Array.from(
                         map.values()
-                    )
+                    ),
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 error
@@ -126,13 +139,15 @@ router.get(
                 .status(500)
                 .json({
 
-                    success: false,
+                    success:
+                        false,
 
                     message:
-                        "Unable to load conversations"
+                        "Unable to load conversations",
                 });
         }
     }
 );
 
-module.exports = router;
+module.exports =
+    router;

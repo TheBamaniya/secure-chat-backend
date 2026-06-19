@@ -5,7 +5,7 @@ const MessageSchema =
     new mongoose.Schema({
 
         /*
-        UNIQUE MESSAGE ID
+        GLOBAL MESSAGE ID
         */
 
         messageId: {
@@ -18,7 +18,7 @@ const MessageSchema =
         },
 
         /*
-        BASIC INFO
+        PARTICIPANTS
         */
 
         sender: {
@@ -37,13 +37,6 @@ const MessageSchema =
 
         /*
         MESSAGE TYPE
-
-        text
-        image
-        video
-        pdf
-        file
-        audio
         */
 
         messageType: {
@@ -58,21 +51,26 @@ const MessageSchema =
 
                 "video",
 
-                "pdf",
+                "audio",
 
                 "file",
 
-                "audio",
+                "pdf",
+
+                "system",
             ],
 
             default: "text",
         },
 
         /*
-        ENCRYPTED CONTENT
+        LOCAL STORAGE REFERENCE
+
+        Actual message content
+        lives on device.
         */
 
-        encryptedContent: {
+        localMessageId: {
 
             type: String,
 
@@ -80,15 +78,13 @@ const MessageSchema =
         },
 
         /*
-        MEDIA INFO
+        THUMBNAIL
+
+        Used for:
+        replies
+        media previews
+        chat list previews
         */
-
-        mediaId: {
-
-            type: String,
-
-            default: "",
-        },
 
         thumbnail: {
 
@@ -96,6 +92,10 @@ const MessageSchema =
 
             default: "",
         },
+
+        /*
+        FILE INFO
+        */
 
         fileName: {
 
@@ -112,10 +112,7 @@ const MessageSchema =
         },
 
         /*
-        GOOGLE DRIVE FILE ID
-
-        Actual file lives in
-        user's Google Drive.
+        GOOGLE DRIVE
         */
 
         driveFileId: {
@@ -125,22 +122,22 @@ const MessageSchema =
             default: "",
         },
 
-        /*
-        ENCRYPTION VERSION
+        backupHash: {
 
-        Allows future upgrades
-        without breaking old backups.
-        */
+            type: String,
 
-        encryptionVersion: {
+            default: "",
+        },
 
-            type: Number,
+        syncedToDrive: {
 
-            default: 1,
+            type: Boolean,
+
+            default: false,
         },
 
         /*
-        REPLY FEATURE
+        REPLY
         */
 
         replyTo: {
@@ -158,7 +155,7 @@ const MessageSchema =
         },
 
         /*
-        FORWARD FEATURE
+        FORWARD
         */
 
         forwarded: {
@@ -176,58 +173,10 @@ const MessageSchema =
         },
 
         /*
-        EDIT FEATURE
-        */
-
-        edited: {
-
-            type: Boolean,
-
-            default: false,
-        },
-
-        editedAt: {
-
-            type: Date,
-        },
-
-        /*
-        DELETE FOR EVERYONE
-        */
-
-        deletedForEveryone: {
-
-            type: Boolean,
-
-            default: false,
-        },
-
-        /*
-        DELETE FOR ME
-        */
-
-        deletedFor: [
-
-            {
-
-                type: String,
-            },
-        ],
-
-        /*
-        STARRED MESSAGES
-        */
-
-        starredBy: [
-
-            {
-
-                type: String,
-            },
-        ],
-
-        /*
         REACTIONS
+
+        ONE REACTION
+        PER USER
         */
 
         reactions: [
@@ -243,8 +192,56 @@ const MessageSchema =
 
                     type: String,
                 },
+
+                reactedAt: {
+
+                    type: Date,
+
+                    default:
+                        Date.now,
+                },
             },
         ],
+
+        /*
+        STARRED
+        */
+
+        starredBy: [
+
+            {
+
+                type: String,
+            },
+        ],
+
+        /*
+        DELETE FOR ME
+        */
+
+        deletedFor: [
+
+            {
+
+                type: String,
+            },
+        ],
+
+        /*
+        DELETE FOR EVERYONE
+        */
+
+        deletedForEveryone: {
+
+            type: Boolean,
+
+            default: false,
+        },
+
+        deletedAt: {
+
+            type: Date,
+        },
 
         /*
         DELIVERY STATUS
@@ -256,31 +253,19 @@ const MessageSchema =
 
             enum: [
 
+                "sending",
+
                 "sent",
 
                 "delivered",
 
                 "seen",
+
+                "failed",
             ],
 
-            default: "sent",
+            default: "sending",
         },
-
-        deliveredTo: [
-
-            {
-
-                type: String,
-            },
-        ],
-
-        seenBy: [
-
-            {
-
-                type: String,
-            },
-        ],
 
         deliveredAt: {
 
@@ -293,7 +278,75 @@ const MessageSchema =
         },
 
         /*
-        MESSAGE TIMESTAMPS
+        OFFLINE SYNC
+        */
+
+        syncVersion: {
+
+            type: Number,
+
+            default: 1,
+        },
+
+        syncState: {
+
+            type: String,
+
+            enum: [
+
+                "pending",
+
+                "synced",
+
+                "failed",
+            ],
+
+            default: "pending",
+        },
+
+        lastSyncedAt: {
+
+            type: Date,
+        },
+
+        /*
+        RETRY QUEUE
+
+        Helps recover from
+        bad internet/network
+        failures.
+        */
+
+        retryCount: {
+
+            type: Number,
+
+            default: 0,
+        },
+
+        lastRetryAt: {
+
+            type: Date,
+        },
+
+        /*
+        EDIT
+        */
+
+        edited: {
+
+            type: Boolean,
+
+            default: false,
+        },
+
+        editedAt: {
+
+            type: Date,
+        },
+
+        /*
+        TIMESTAMPS
         */
 
         sentAt: {

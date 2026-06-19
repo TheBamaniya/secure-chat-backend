@@ -1,70 +1,145 @@
-const express =
-    require("express");
+const express = require("express");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-const jwt =
-    require("jsonwebtoken");
-
-const User =
-    require("../models/User");
-
-const router =
-    express.Router();
+const router = express.Router();
 
 /*
-REGISTER USER
+PHONE NORMALIZATION
+*/
+
+function normalizePhoneNumber(number) {
+
+    if (!number) {
+        return null;
+    }
+
+    number = String(number)
+        .replace(/\s/g, "")
+        .replace(/-/g, "")
+        .replace(/\(/g, "")
+        .replace(/\)/g, "");
+
+    if (number.startsWith("+91")) {
+        number = number.substring(3);
+    }
+
+    if (
+        number.startsWith("91") &&
+        number.length > 10
+    ) {
+        number = number.substring(2);
+    }
+
+    if (
+        number.startsWith("0") &&
+        number.length === 11
+    ) {
+        number = number.substring(1);
+    }
+
+    return number;
+}
+
+/*
+VALIDATE INDIAN MOBILE
+*/
+
+function isValidIndianMobile(number) {
+
+    return /^[6-9][0-9]{9}$/.test(number);
+}
+
+/*
+REGISTER
 */
 
 router.post(
-
     "/register",
-
     async (req, res) => {
 
         try {
 
-            const {
-
+            let {
                 phoneNumber,
-
                 name,
-
+                deviceId,
+                deviceName,
+                simHash,
+                deviceHash,
             } = req.body;
+
+            phoneNumber =
+                normalizePhoneNumber(
+                    phoneNumber
+                );
+
+            if (
+                !isValidIndianMobile(
+                    phoneNumber
+                )
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Invalid mobile number",
+                });
+            }
 
             let user =
                 await User.findOne({
-
                     phoneNumber,
                 });
 
-            if (!user) {
+            if (user) {
 
-                user =
-                    await User.create({
+                return res.status(409).json({
 
-                        phoneNumber,
+                    success: false,
 
-                        name:
-                            name || "",
-                    });
+                    message:
+                        "Number already registered",
+                });
             }
+
+            user =
+                await User.create({
+
+                    phoneNumber,
+
+                    name:
+                        name || "",
+
+                    deviceId:
+                        deviceId || "",
+
+                    deviceName:
+                        deviceName || "",
+
+                    simHash:
+                        simHash || "",
+
+                    deviceHash:
+                        deviceHash || "",
+                });
 
             const token =
                 jwt.sign(
 
                     {
-
                         phoneNumber:
                             user.phoneNumber,
                     },
 
-                    process.env
-                        .JWT_SECRET,
+                    process.env.JWT_SECRET,
 
                     {
-
                         expiresIn:
                             "30d",
-                    },
+                    }
                 );
 
             return res.json({
@@ -88,30 +163,45 @@ router.post(
                     "Registration failed",
             });
         }
-    },
+    }
 );
 
 /*
-LOGIN USER
+LOGIN
 */
 
 router.post(
-
     "/login",
-
     async (req, res) => {
 
         try {
 
-            const {
-
+            let {
                 phoneNumber,
-
             } = req.body;
+
+            phoneNumber =
+                normalizePhoneNumber(
+                    phoneNumber
+                );
+
+            if (
+                !isValidIndianMobile(
+                    phoneNumber
+                )
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Invalid mobile number",
+                });
+            }
 
             const user =
                 await User.findOne({
-
                     phoneNumber,
                 });
 
@@ -130,19 +220,16 @@ router.post(
                 jwt.sign(
 
                     {
-
                         phoneNumber:
                             user.phoneNumber,
                     },
 
-                    process.env
-                        .JWT_SECRET,
+                    process.env.JWT_SECRET,
 
                     {
-
                         expiresIn:
                             "30d",
-                    },
+                    }
                 );
 
             return res.json({
@@ -166,8 +253,7 @@ router.post(
                     "Login failed",
             });
         }
-    },
+    }
 );
 
-module.exports =
-    router;
+module.exports = router;
