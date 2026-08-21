@@ -5,12 +5,41 @@ const Message =
     require("../models/Message");
 
 const auth =
-    require(
-        "../middleware/authMiddleware"
-    );
+    require("../middleware/authMiddleware");
 
 const router =
     express.Router();
+
+
+/*
+==================================================
+HELPERS
+==================================================
+*/
+
+function isParticipant(
+    message,
+    user
+) {
+
+    return (
+        message.sender === user ||
+        message.receiver === user
+    );
+}
+
+
+function isValidSyncState(
+    state
+) {
+
+    return [
+        "pending",
+        "synced",
+        "failed",
+    ].includes(state);
+}
+
 
 /*
 ==================================================
@@ -45,20 +74,22 @@ router.get(
                             sender: receiver,
                             receiver: me,
                         },
-                    ],
-                })
 
+                    ],
+
+                })
                 .sort({
                     timestamp: 1,
                 })
-
                 .limit(500);
+
 
             return res.json({
 
                 success: true,
 
                 messages,
+
             });
 
         } catch (error) {
@@ -74,6 +105,7 @@ router.get(
 
                 message:
                     "Unable to load messages",
+
             });
         }
     }
@@ -98,7 +130,9 @@ router.get(
 
                     messageId:
                         req.params.messageId,
+
                 });
+
 
             if (!message) {
 
@@ -108,23 +142,20 @@ router.get(
 
                     message:
                         "Message not found",
+
                 });
             }
 
-            /*
-            Make sure the requesting user
-            is actually part of the conversation.
-            */
 
             const user =
                 req.user.phoneNumber;
 
+
             if (
-
-                message.sender !== user &&
-
-                message.receiver !== user
-
+                !isParticipant(
+                    message,
+                    user
+                )
             ) {
 
                 return res.status(403).json({
@@ -133,14 +164,17 @@ router.get(
 
                     message:
                         "Access denied",
+
                 });
             }
+
 
             return res.json({
 
                 success: true,
 
                 message,
+
             });
 
         } catch (error) {
@@ -156,6 +190,7 @@ router.get(
 
                 message:
                     "Unable to load message",
+
             });
         }
     }
@@ -165,6 +200,7 @@ router.get(
 /*
 ==================================================
 REACTION
+==================================================
 
 Same emoji:
 REMOVE
@@ -174,6 +210,9 @@ REPLACE
 
 No reaction:
 ADD
+
+Every reaction changes
+syncVersion.
 ==================================================
 */
 
@@ -192,8 +231,10 @@ router.post(
 
             } = req.body;
 
+
             const user =
                 req.user.phoneNumber;
+
 
             if (
                 !messageId ||
@@ -206,14 +247,18 @@ router.post(
 
                     message:
                         "messageId and emoji are required",
+
                 });
             }
+
 
             const message =
                 await Message.findOne({
 
                     messageId,
+
                 });
+
 
             if (!message) {
 
@@ -223,20 +268,16 @@ router.post(
 
                     message:
                         "Message not found",
+
                 });
             }
 
-            /*
-            USER MUST BE PART
-            OF CONVERSATION
-            */
 
             if (
-
-                message.sender !== user &&
-
-                message.receiver !== user
-
+                !isParticipant(
+                    message,
+                    user
+                )
             ) {
 
                 return res.status(403).json({
@@ -245,25 +286,28 @@ router.post(
 
                     message:
                         "Access denied",
+
                 });
             }
 
-            /*
-            FIND EXISTING REACTION
-            */
 
             const existingIndex =
                 message.reactions.findIndex(
 
                     (reaction) =>
 
-                        reaction.user === user
+                        reaction.user ===
+                        user
+
                 );
+
+
+            let action;
 
 
             /*
             SAME EMOJI
-            REMOVE REACTION
+            REMOVE
             */
 
             if (
@@ -281,29 +325,21 @@ router.post(
                     existingIndex,
 
                     1
+
                 );
 
-                await message.save();
+                action =
+                    "removed";
 
-                return res.json({
-
-                    success: true,
-
-                    action:
-                        "removed",
-
-                    reactions:
-                        message.reactions,
-                });
             }
 
 
             /*
             DIFFERENT EMOJI
-            REPLACE REACTION
+            REPLACE
             */
 
-            if (
+            else if (
                 existingIndex !== -1
             ) {
 
@@ -317,11 +353,14 @@ router.post(
                 ].reactedAt =
                     new Date();
 
+                action =
+                    "replaced";
+
             }
 
+
             /*
-            NO EXISTING REACTION
-            ADD REACTION
+            ADD
             */
 
             else {
@@ -334,22 +373,47 @@ router.post(
 
                     reactedAt:
                         new Date(),
+
                 });
+
+                action =
+                    "added";
             }
 
+
+            /*
+            A reaction is a message
+            state change.
+
+            Therefore create a
+            new synchronization version.
+            */
+
+            message.syncVersion +=
+                1;
+
+            message.syncState =
+                "pending";
+
+            message.lastSyncedAt =
+                undefined;
+
+
             await message.save();
+
 
             return res.json({
 
                 success: true,
 
-                action:
-                    existingIndex === -1
-                        ? "added"
-                        : "replaced",
+                action,
 
                 reactions:
                     message.reactions,
+
+                syncVersion:
+                    message.syncVersion,
+
             });
 
         } catch (error) {
@@ -365,6 +429,7 @@ router.post(
 
                 message:
                     "Unable to update reaction",
+
             });
         }
     }
@@ -374,6 +439,10 @@ router.post(
 /*
 ==================================================
 STAR MESSAGE
+==================================================
+
+Star/unstar is also a synchronized
+message state change.
 ==================================================
 */
 
@@ -388,8 +457,10 @@ router.post(
                 messageId,
             } = req.body;
 
+
             const user =
                 req.user.phoneNumber;
+
 
             if (!messageId) {
 
@@ -399,14 +470,18 @@ router.post(
 
                     message:
                         "messageId is required",
+
                 });
             }
+
 
             const message =
                 await Message.findOne({
 
                     messageId,
+
                 });
+
 
             if (!message) {
 
@@ -416,15 +491,16 @@ router.post(
 
                     message:
                         "Message not found",
+
                 });
             }
 
+
             if (
-
-                message.sender !== user &&
-
-                message.receiver !== user
-
+                !isParticipant(
+                    message,
+                    user
+                )
             ) {
 
                 return res.status(403).json({
@@ -433,23 +509,26 @@ router.post(
 
                     message:
                         "Access denied",
+
                 });
             }
+
 
             const exists =
                 message.starredBy.includes(
                     user
                 );
 
+
             if (exists) {
 
                 message.starredBy =
-
                     message.starredBy.filter(
 
                         (starredUser) =>
 
                             starredUser !== user
+
                     );
 
             } else {
@@ -457,9 +536,22 @@ router.post(
                 message.starredBy.push(
                     user
                 );
+
             }
 
+
+            message.syncVersion +=
+                1;
+
+            message.syncState =
+                "pending";
+
+            message.lastSyncedAt =
+                undefined;
+
+
             await message.save();
+
 
             return res.json({
 
@@ -467,6 +559,10 @@ router.post(
 
                 starred:
                     !exists,
+
+                syncVersion:
+                    message.syncVersion,
+
             });
 
         } catch (error) {
@@ -482,6 +578,7 @@ router.post(
 
                 message:
                     "Unable to update star",
+
             });
         }
     }
@@ -491,17 +588,16 @@ router.post(
 /*
 ==================================================
 EDIT MESSAGE
+==================================================
 
-IMPORTANT:
+The server does NOT receive the
+actual plaintext message.
 
-The server does NOT receive
-the actual message text.
+The actual encrypted/local content
+is changed on the device.
 
-The encrypted/local message
-is updated on the device.
-
-The server only records that
-the message was edited.
+The server only records that the
+message was edited.
 ==================================================
 */
 
@@ -516,8 +612,10 @@ router.post(
                 messageId,
             } = req.body;
 
+
             const user =
                 req.user.phoneNumber;
+
 
             if (!messageId) {
 
@@ -527,14 +625,18 @@ router.post(
 
                     message:
                         "messageId is required",
+
                 });
             }
+
 
             const message =
                 await Message.findOne({
 
                     messageId,
+
                 });
+
 
             if (!message) {
 
@@ -544,13 +646,10 @@ router.post(
 
                     message:
                         "Message not found",
+
                 });
             }
 
-            /*
-            ONLY THE ORIGINAL
-            SENDER CAN EDIT
-            */
 
             if (
                 message.sender !== user
@@ -562,13 +661,10 @@ router.post(
 
                     message:
                         "Only the sender can edit the message",
+
                 });
             }
 
-            /*
-            DO NOT ALLOW EDITING
-            DELETED MESSAGE
-            */
 
             if (
                 message.deletedForEveryone
@@ -580,8 +676,10 @@ router.post(
 
                     message:
                         "Deleted message cannot be edited",
+
                 });
             }
+
 
             message.edited =
                 true;
@@ -589,7 +687,8 @@ router.post(
             message.editedAt =
                 new Date();
 
-            message.syncVersion += 1;
+            message.syncVersion +=
+                1;
 
             message.syncState =
                 "pending";
@@ -597,7 +696,9 @@ router.post(
             message.lastSyncedAt =
                 undefined;
 
+
             await message.save();
+
 
             return res.json({
 
@@ -614,6 +715,7 @@ router.post(
 
                 syncVersion:
                     message.syncVersion,
+
             });
 
         } catch (error) {
@@ -629,6 +731,7 @@ router.post(
 
                 message:
                     "Unable to edit message",
+
             });
         }
     }
@@ -652,8 +755,10 @@ router.post(
                 messageId,
             } = req.body;
 
+
             const user =
                 req.user.phoneNumber;
+
 
             if (!messageId) {
 
@@ -663,14 +768,18 @@ router.post(
 
                     message:
                         "messageId is required",
+
                 });
             }
+
 
             const message =
                 await Message.findOne({
 
                     messageId,
+
                 });
+
 
             if (!message) {
 
@@ -680,15 +789,16 @@ router.post(
 
                     message:
                         "Message not found",
+
                 });
             }
 
+
             if (
-
-                message.sender !== user &&
-
-                message.receiver !== user
-
+                !isParticipant(
+                    message,
+                    user
+                )
             ) {
 
                 return res.status(403).json({
@@ -697,28 +807,38 @@ router.post(
 
                     message:
                         "Access denied",
+
                 });
             }
 
-            message.deletedFor =
 
-                message.deletedFor.filter(
+            /*
+            Avoid duplicate entries.
+            */
 
-                    (deletedUser) =>
+            if (
+                !message.deletedFor.includes(
+                    user
+                )
+            ) {
 
-                        deletedUser !== user
+                message.deletedFor.push(
+                    user
                 );
 
-            message.deletedFor.push(
-                user
-            );
+                message.syncVersion +=
+                    1;
 
-            message.syncVersion += 1;
+                message.syncState =
+                    "pending";
 
-            message.syncState =
-                "pending";
+                message.lastSyncedAt =
+                    undefined;
 
-            await message.save();
+                await message.save();
+
+            }
+
 
             return res.json({
 
@@ -726,6 +846,10 @@ router.post(
 
                 message:
                     "Message deleted for you",
+
+                syncVersion:
+                    message.syncVersion,
+
             });
 
         } catch (error) {
@@ -741,6 +865,7 @@ router.post(
 
                 message:
                     "Unable to delete message",
+
             });
         }
     }
@@ -764,8 +889,10 @@ router.post(
                 messageId,
             } = req.body;
 
+
             const user =
                 req.user.phoneNumber;
+
 
             if (!messageId) {
 
@@ -775,14 +902,18 @@ router.post(
 
                     message:
                         "messageId is required",
+
                 });
             }
+
 
             const message =
                 await Message.findOne({
 
                     messageId,
+
                 });
+
 
             if (!message) {
 
@@ -792,13 +923,10 @@ router.post(
 
                     message:
                         "Message not found",
+
                 });
             }
 
-            /*
-            ONLY SENDER CAN
-            DELETE FOR EVERYONE
-            */
 
             if (
                 message.sender !== user
@@ -810,12 +938,10 @@ router.post(
 
                     message:
                         "Only the sender can delete this message for everyone",
+
                 });
             }
 
-            /*
-            ALREADY DELETED
-            */
 
             if (
                 message.deletedForEveryone
@@ -827,8 +953,13 @@ router.post(
 
                     message:
                         "Message already deleted",
+
+                    syncVersion:
+                        message.syncVersion,
+
                 });
             }
+
 
             message.deletedForEveryone =
                 true;
@@ -836,12 +967,18 @@ router.post(
             message.deletedAt =
                 new Date();
 
-            message.syncVersion += 1;
+            message.syncVersion +=
+                1;
 
             message.syncState =
                 "pending";
 
+            message.lastSyncedAt =
+                undefined;
+
+
             await message.save();
+
 
             return res.json({
 
@@ -849,6 +986,10 @@ router.post(
 
                 message:
                     "Message deleted for everyone",
+
+                syncVersion:
+                    message.syncVersion,
+
             });
 
         } catch (error) {
@@ -864,6 +1005,7 @@ router.post(
 
                 message:
                     "Unable to delete message",
+
             });
         }
     }
@@ -872,11 +1014,43 @@ router.post(
 
 /*
 ==================================================
-SYNC
+SYNC MESSAGE BACKUP
+==================================================
 
-Used when local encrypted
-storage or Google Drive
-backup changes metadata.
+IMPORTANT:
+
+syncVersion belongs to the MESSAGE STATE.
+
+Uploading a backup must NOT increment
+syncVersion.
+
+The client must tell the server which
+message version it backed up.
+
+Example:
+
+Server message:
+syncVersion = 7
+
+Device backs up version 7.
+
+Device sends:
+
+clientSyncVersion = 7
+syncState = synced
+
+Server verifies:
+
+message.syncVersion === 7
+
+Then marks version 7 as backed up.
+
+If the server is already at version 8,
+the old device cannot overwrite the
+backup state.
+
+This prevents stale devices from
+claiming that an older state is current.
 ==================================================
 */
 
@@ -897,10 +1071,14 @@ router.post(
 
                 driveFileId,
 
+                clientSyncVersion,
+
             } = req.body;
+
 
             const user =
                 req.user.phoneNumber;
+
 
             if (!messageId) {
 
@@ -910,14 +1088,87 @@ router.post(
 
                     message:
                         "messageId is required",
+
                 });
             }
+
+
+            /*
+            A sync operation must specify
+            the exact version being synced.
+            */
+
+            if (
+                clientSyncVersion ===
+                undefined ||
+                clientSyncVersion ===
+                null
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "clientSyncVersion is required",
+
+                });
+            }
+
+
+            const requestedVersion =
+                Number(
+                    clientSyncVersion
+                );
+
+
+            if (
+                !Number.isInteger(
+                    requestedVersion
+                ) ||
+                requestedVersion < 1
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Invalid clientSyncVersion",
+
+                });
+            }
+
+
+            /*
+            Validate state.
+            */
+
+            if (
+                syncState &&
+                !isValidSyncState(
+                    syncState
+                )
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Invalid sync state",
+
+                });
+            }
+
 
             const message =
                 await Message.findOne({
 
                     messageId,
+
                 });
+
 
             if (!message) {
 
@@ -927,20 +1178,21 @@ router.post(
 
                     message:
                         "Message not found",
+
                 });
             }
 
+
             /*
-            ONLY PARTICIPANTS
-            CAN SYNC MESSAGE
+            Only participants can
+            synchronize this message.
             */
 
             if (
-
-                message.sender !== user &&
-
-                message.receiver !== user
-
+                !isParticipant(
+                    message,
+                    user
+                )
             ) {
 
                 return res.status(403).json({
@@ -949,40 +1201,50 @@ router.post(
 
                     message:
                         "Access denied",
+
                 });
             }
 
+
             /*
-            VALIDATE SYNC STATE
+            ==========================================
+            STALE VERSION PROTECTION
+            ==========================================
             */
 
-            const allowedStates = [
-
-                "pending",
-
-                "synced",
-
-                "failed",
-            ];
-
             if (
-
-                syncState &&
-
-                !allowedStates.includes(
-                    syncState
-                )
-
+                requestedVersion !==
+                message.syncVersion
             ) {
 
-                return res.status(400).json({
+                return res.status(409).json({
 
                     success: false,
 
+                    code:
+                        "SYNC_VERSION_CONFLICT",
+
                     message:
-                        "Invalid sync state",
+                        "Message has changed since this version was prepared for backup.",
+
+                    currentSyncVersion:
+                        message.syncVersion,
+
+                    clientSyncVersion:
+                        requestedVersion,
+
+                    syncState:
+                        message.syncState,
+
                 });
             }
+
+
+            /*
+            ==========================================
+            RECORD BACKUP METADATA
+            ==========================================
+            */
 
             if (
                 syncState
@@ -990,35 +1252,60 @@ router.post(
 
                 message.syncState =
                     syncState;
+
             }
 
+
             if (
-                backupHash
+                backupHash !==
+                undefined
             ) {
 
                 message.backupHash =
-                    backupHash;
+                    backupHash || "";
+
             }
 
+
             if (
-                driveFileId
+                driveFileId !==
+                undefined
             ) {
 
                 message.driveFileId =
-                    driveFileId;
+                    driveFileId || "";
+
             }
 
-            message.lastSyncedAt =
-                new Date();
+
+            /*
+            The backup is considered
+            synced only when the requested
+            state is explicitly "synced".
+            */
 
             message.syncedToDrive =
 
                 syncState ===
                 "synced";
 
-            message.syncVersion += 1;
+
+            message.lastSyncedAt =
+                new Date();
+
+
+            /*
+            IMPORTANT:
+
+            DO NOT increment syncVersion here.
+
+            The version being backed up
+            remains the same.
+            */
+
 
             await message.save();
+
 
             return res.json({
 
@@ -1032,6 +1319,16 @@ router.post(
 
                 lastSyncedAt:
                     message.lastSyncedAt,
+
+                syncedToDrive:
+                    message.syncedToDrive,
+
+                backupHash:
+                    message.backupHash,
+
+                driveFileId:
+                    message.driveFileId,
+
             });
 
         } catch (error) {
@@ -1047,10 +1344,177 @@ router.post(
 
                 message:
                     "Sync failed",
+
             });
         }
     }
 );
+
+
+/*
+==================================================
+GET UNSYNCED MESSAGES
+==================================================
+
+Used later by the device backup
+system.
+
+This returns metadata only.
+
+It does NOT return plaintext
+message content.
+==================================================
+*/
+
+router.get(
+    "/sync/pending",
+    auth,
+    async (req, res) => {
+
+        try {
+
+            const user =
+                req.user.phoneNumber;
+
+
+            const messages =
+                await Message.find({
+
+                    $and: [
+
+                        {
+                            $or: [
+
+                                {
+                                    sender:
+                                        user,
+                                },
+
+                                {
+                                    receiver:
+                                        user,
+                                },
+
+                            ],
+                        },
+
+                        {
+                            syncState:
+                                {
+                                    $ne:
+                                        "synced",
+                                },
+                        },
+
+                    ],
+
+                })
+                .sort({
+                    timestamp: 1,
+                })
+                .limit(500);
+
+
+            /*
+            Return only metadata needed
+            by the future backup worker.
+
+            Actual encrypted message
+            contents remain on device.
+            */
+
+            const metadata =
+                messages.map(
+
+                    (message) => ({
+
+                        messageId:
+                            message.messageId,
+
+                        sender:
+                            message.sender,
+
+                        receiver:
+                            message.receiver,
+
+                        messageType:
+                            message.messageType,
+
+                        localMessageId:
+                            message.localMessageId,
+
+                        thumbnail:
+                            message.thumbnail,
+
+                        fileName:
+                            message.fileName,
+
+                        fileSize:
+                            message.fileSize,
+
+                        replyTo:
+                            message.replyTo,
+
+                        replyPreview:
+                            message.replyPreview,
+
+                        syncVersion:
+                            message.syncVersion,
+
+                        syncState:
+                            message.syncState,
+
+                        backupHash:
+                            message.backupHash,
+
+                        driveFileId:
+                            message.driveFileId,
+
+                        syncedToDrive:
+                            message.syncedToDrive,
+
+                        timestamp:
+                            message.timestamp,
+
+                    })
+
+                );
+
+
+            return res.json({
+
+                success: true,
+
+                messages:
+                    metadata,
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "PENDING SYNC ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to load pending synchronization messages",
+
+            });
+        }
+    }
+);
+
+
+/*
+==================================================
+EXPORT
+==================================================
+*/
 
 module.exports =
     router;

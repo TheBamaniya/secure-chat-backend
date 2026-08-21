@@ -4,11 +4,11 @@ const express =
 const jwt =
     require("jsonwebtoken");
 
-const crypto =
-    require("crypto");
-
 const User =
     require("../models/User");
+
+const Device =
+    require("../models/Device");
 
 const router =
     express.Router();
@@ -20,12 +20,16 @@ PHONE NUMBER NORMALIZATION
 ==================================================
 */
 
-function normalizePhoneNumber(number) {
+function normalizePhoneNumber(
+    number
+) {
 
     if (!number) {
 
         return null;
+
     }
+
 
     number =
         String(number)
@@ -34,6 +38,7 @@ function normalizePhoneNumber(number) {
             .replace(/-/g, "")
             .replace(/\(/g, "")
             .replace(/\)/g, "");
+
 
     /*
     Remove India country code.
@@ -46,7 +51,9 @@ function normalizePhoneNumber(number) {
         number =
             number.substring(3);
 
-    } else if (
+    }
+
+    else if (
 
         number.startsWith("91") &&
 
@@ -56,7 +63,9 @@ function normalizePhoneNumber(number) {
 
         number =
             number.substring(2);
+
     }
+
 
     /*
     Remove leading zero.
@@ -72,9 +81,12 @@ function normalizePhoneNumber(number) {
 
         number =
             number.substring(1);
+
     }
 
+
     return number;
+
 }
 
 
@@ -83,8 +95,10 @@ function normalizePhoneNumber(number) {
 INDIAN MOBILE VALIDATION
 ==================================================
 
-Must be exactly 10 digits
-and begin with 6, 7, 8 or 9.
+Exactly 10 digits.
+
+First digit:
+6, 7, 8 or 9.
 ==================================================
 */
 
@@ -95,35 +109,7 @@ function isValidIndianMobile(
     return /^[6-9][0-9]{9}$/.test(
         number
     );
-}
 
-
-/*
-==================================================
-HASH DEVICE INFORMATION
-==================================================
-
-The server never needs to store
-raw device fingerprint material.
-
-This helper is available for
-future verification logic.
-==================================================
-*/
-
-function createDeviceHash(
-    deviceId,
-    deviceName
-) {
-
-    const value =
-
-        `${deviceId || ""}|${deviceName || ""}`;
-
-    return crypto
-        .createHash("sha256")
-        .update(value)
-        .digest("hex");
 }
 
 
@@ -134,21 +120,31 @@ CREATE JWT
 */
 
 function createToken(
-    phoneNumber
+    phoneNumber,
+    deviceId
 ) {
 
     return jwt.sign(
 
         {
+
             phoneNumber,
+
+            deviceId,
+
         },
 
         process.env.JWT_SECRET,
 
         {
-            expiresIn: "30d",
+
+            expiresIn:
+                "30d",
+
         }
+
     );
+
 }
 
 
@@ -182,13 +178,16 @@ router.post(
 
 
             /*
+            ==========================================
             PHONE
+            ==========================================
             */
 
             phoneNumber =
                 normalizePhoneNumber(
                     phoneNumber
                 );
+
 
             if (
                 !isValidIndianMobile(
@@ -202,17 +201,25 @@ router.post(
 
                     message:
                         "Invalid Indian mobile number. Enter exactly 10 digits without the country code.",
+
                 });
+
             }
 
 
             /*
+            ==========================================
             DEVICE ID
+            ==========================================
             */
 
             if (
+
                 !deviceId ||
-                typeof deviceId !== "string"
+
+                typeof deviceId !==
+                    "string"
+
             ) {
 
                 return res.status(400).json({
@@ -221,17 +228,25 @@ router.post(
 
                     message:
                         "Device ID is required.",
+
                 });
+
             }
 
 
             /*
+            ==========================================
             DEVICE HASH
+            ==========================================
             */
 
             if (
+
                 !deviceHash ||
-                typeof deviceHash !== "string"
+
+                typeof deviceHash !==
+                    "string"
+
             ) {
 
                 return res.status(400).json({
@@ -240,18 +255,23 @@ router.post(
 
                     message:
                         "Device fingerprint is required.",
+
                 });
+
             }
 
 
             /*
-            FIND EXISTING USER
+            ==========================================
+            FIND USER
+            ==========================================
             */
 
             const existingUser =
                 await User.findOne({
 
                     phoneNumber,
+
                 });
 
 
@@ -265,12 +285,46 @@ router.post(
 
                     message:
                         "This mobile number is already registered.",
+
                 });
+
             }
 
 
             /*
+            ==========================================
+            CHECK DEVICE ID
+            ==========================================
+            */
+
+            const existingDevice =
+                await Device.findOne({
+
+                    deviceId,
+
+                });
+
+
+            if (
+                existingDevice
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    message:
+                        "This device is already registered.",
+
+                });
+
+            }
+
+
+            /*
+            ==========================================
             CREATE USER
+            ==========================================
             */
 
             const user =
@@ -283,6 +337,14 @@ router.post(
                         "string"
                             ? name.trim()
                             : "",
+
+                    /*
+                    These fields are retained in
+                    User for backward compatibility.
+
+                    Device.js is now the authoritative
+                    device registry.
+                    */
 
                     deviceId,
 
@@ -308,18 +370,75 @@ router.post(
 
                     lastSeen:
                         new Date(),
+
                 });
 
 
             /*
-            CREATE JWT
+            ==========================================
+            CREATE PRIMARY DEVICE
+            ==========================================
+            */
+
+            await Device.create({
+
+                phoneNumber,
+
+                deviceId,
+
+                deviceHash,
+
+                simHash:
+                    simHash || "",
+
+                deviceName:
+                    deviceName || "",
+
+                status:
+                    "active",
+
+                isPrimary:
+                    true,
+
+                registeredAt:
+                    new Date(),
+
+                lastChangedAt:
+                    new Date(),
+
+                lastSeenAt:
+                    new Date(),
+
+                lastLoginAt:
+                    new Date(),
+
+                lastIpAddress:
+                    req.ip || "",
+
+            });
+
+
+            /*
+            ==========================================
+            CREATE TOKEN
+            ==========================================
             */
 
             const token =
                 createToken(
-                    user.phoneNumber
+
+                    user.phoneNumber,
+
+                    deviceId
+
                 );
 
+
+            /*
+            ==========================================
+            RESPONSE
+            ==========================================
+            */
 
             return res.status(201).json({
 
@@ -338,29 +457,33 @@ router.post(
                     name:
                         user.name,
 
-                    deviceId:
-                        user.deviceId,
+                    deviceId,
 
                     deviceName:
-                        user.deviceName,
+                        deviceName || "",
 
                     accountStatus:
                         user.accountStatus,
+
                 },
+
             });
 
-        } catch (error) {
+        }
+
+        catch (error) {
 
             console.error(
 
                 "REGISTRATION ERROR:",
 
                 error
+
             );
 
 
             /*
-            MONGODB DUPLICATE KEY
+            MongoDB duplicate key.
             */
 
             if (
@@ -372,8 +495,10 @@ router.post(
                     success: false,
 
                     message:
-                        "This mobile number is already registered.",
+                        "This account or device is already registered.",
+
                 });
+
             }
 
 
@@ -383,8 +508,11 @@ router.post(
 
                 message:
                     "Registration failed.",
+
             });
+
         }
+
     }
 );
 
@@ -417,13 +545,16 @@ router.post(
 
 
             /*
+            ==========================================
             PHONE
+            ==========================================
             */
 
             phoneNumber =
                 normalizePhoneNumber(
                     phoneNumber
                 );
+
 
             if (
                 !isValidIndianMobile(
@@ -437,17 +568,24 @@ router.post(
 
                     message:
                         "Invalid Indian mobile number. Enter exactly 10 digits without the country code.",
+
                 });
+
             }
 
 
             /*
+            ==========================================
             DEVICE INFORMATION
+            ==========================================
             */
 
             if (
+
                 !deviceId ||
+
                 !deviceHash
+
             ) {
 
                 return res.status(400).json({
@@ -456,18 +594,23 @@ router.post(
 
                     message:
                         "Device verification information is required.",
+
                 });
+
             }
 
 
             /*
+            ==========================================
             FIND USER
+            ==========================================
             */
 
             const user =
                 await User.findOne({
 
                     phoneNumber,
+
                 });
 
 
@@ -479,17 +622,23 @@ router.post(
 
                     message:
                         "User not found. Please register first.",
+
                 });
+
             }
 
 
             /*
+            ==========================================
             ACCOUNT STATUS
+            ==========================================
             */
 
             if (
+
                 user.accountStatus ===
                 "blocked"
+
             ) {
 
                 return res.status(403).json({
@@ -498,45 +647,35 @@ router.post(
 
                     message:
                         "This account is blocked.",
+
                 });
+
             }
 
 
             /*
-            DEVICE VERIFICATION
+            ==========================================
+            FIND DEVICE
+            ==========================================
             */
 
-            const deviceMatches =
+            const device =
+                await Device.findOne({
 
-                user.deviceId ===
-                deviceId;
+                    phoneNumber,
 
+                    deviceId,
 
-            const deviceHashMatches =
-
-                user.deviceHash ===
-                deviceHash;
+                });
 
 
             /*
+            ==========================================
             UNKNOWN DEVICE
+            ==========================================
             */
 
-            if (
-
-                !deviceMatches ||
-
-                !deviceHashMatches
-
-            ) {
-
-                /*
-                Do NOT overwrite the
-                registered device.
-
-                We need a separate recovery /
-                verification flow later.
-                */
+            if (!device) {
 
                 return res.status(403).json({
 
@@ -547,18 +686,81 @@ router.post(
 
                     message:
                         "This account is registered to another device. Device verification is required before login.",
+
                 });
+
             }
 
 
             /*
+            ==========================================
+            DEVICE STATUS
+            ==========================================
+            */
+
+            if (
+
+                device.status ===
+                "blocked" ||
+
+                device.status ===
+                "revoked"
+
+            ) {
+
+                return res.status(403).json({
+
+                    success: false,
+
+                    code:
+                        "DEVICE_BLOCKED",
+
+                    message:
+                        "This device is not authorized to access this account.",
+
+                });
+
+            }
+
+
+            /*
+            ==========================================
+            DEVICE HASH VERIFICATION
+            ==========================================
+            */
+
+            if (
+
+                device.deviceHash !==
+                deviceHash
+
+            ) {
+
+                return res.status(403).json({
+
+                    success: false,
+
+                    code:
+                        "DEVICE_VERIFICATION_REQUIRED",
+
+                    message:
+                        "Device verification is required.",
+
+                });
+
+            }
+
+
+            /*
+            ==========================================
             SIM CHANGE
+            ==========================================
 
-            A SIM change should NOT
-            permanently lock the account.
+            A changed SIM does not permanently
+            destroy the account.
 
-            We mark the account for
-            additional verification.
+            It triggers additional verification.
+            ==========================================
             */
 
             let verificationRequired =
@@ -567,11 +769,11 @@ router.post(
 
             if (
 
-                user.simHash &&
+                device.simHash &&
 
                 simHash &&
 
-                user.simHash !==
+                device.simHash !==
                 simHash
 
             ) {
@@ -579,55 +781,103 @@ router.post(
                 verificationRequired =
                     true;
 
+                device.status =
+                    "verification_required";
+
                 user.accountStatus =
                     "verification_required";
 
                 user.lastDeviceChange =
                     new Date();
 
-                await user.save();
             }
 
 
             /*
-            UPDATE LAST SEEN
+            ==========================================
+            If SIM matches, restore active state
+            when the previous state was temporary
+            verification_required.
+            ==========================================
+            */
+
+            else if (
+
+                device.status ===
+                "verification_required"
+
+            ) {
+
+                /*
+                Do not automatically clear
+                verification_required.
+
+                The recovery/verification
+                endpoint will handle that later.
+                */
+
+                verificationRequired =
+                    true;
+
+            }
+
+
+            /*
+            ==========================================
+            UPDATE DEVICE
+            ==========================================
+            */
+
+            device.deviceName =
+                deviceName ||
+                device.deviceName;
+
+            device.lastSeenAt =
+                new Date();
+
+            device.lastLoginAt =
+                new Date();
+
+            device.lastIpAddress =
+                req.ip || "";
+
+
+            /*
+            ==========================================
+            UPDATE USER
+            ==========================================
             */
 
             user.lastSeen =
                 new Date();
 
 
-            /*
-            If the SIM has not changed,
-            make sure an old temporary
-            verification state is not
-            preserved.
-            */
-
-            if (
-                !verificationRequired &&
-
-                user.accountStatus ===
-                    "verification_required"
-            ) {
-
-                user.accountStatus =
-                    "active";
-            }
-
+            await device.save();
 
             await user.save();
 
 
             /*
-            CREATE JWT
+            ==========================================
+            CREATE TOKEN
+            ==========================================
             */
 
             const token =
                 createToken(
-                    user.phoneNumber
+
+                    user.phoneNumber,
+
+                    device.deviceId
+
                 );
 
+
+            /*
+            ==========================================
+            RESPONSE
+            ==========================================
+            */
 
             return res.json({
 
@@ -646,23 +896,28 @@ router.post(
                         user.name,
 
                     deviceId:
-                        user.deviceId,
+                        device.deviceId,
 
                     deviceName:
-                        user.deviceName,
+                        device.deviceName,
 
                     accountStatus:
                         user.accountStatus,
+
                 },
+
             });
 
-        } catch (error) {
+        }
+
+        catch (error) {
 
             console.error(
 
                 "LOGIN ERROR:",
 
                 error
+
             );
 
 
@@ -672,8 +927,11 @@ router.post(
 
                 message:
                     "Login failed.",
+
             });
+
         }
+
     }
 );
 
