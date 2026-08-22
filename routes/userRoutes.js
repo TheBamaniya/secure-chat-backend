@@ -68,6 +68,114 @@ function isValidDriveFolderId(
 
 /*
 ==================================================
+PHONE NUMBER VALIDATION
+==================================================
+
+SecureChat currently uses Indian
+10-digit mobile numbers without
+the +91 country code.
+
+==================================================
+*/
+
+
+function normalizePhoneNumber(
+    phoneNumber
+) {
+
+    if (
+        typeof phoneNumber !==
+        "string"
+    ) {
+
+        return null;
+
+    }
+
+
+    const value =
+        phoneNumber.trim();
+
+
+    if (
+        !/^[6-9][0-9]{9}$/.test(
+            value
+        )
+    ) {
+
+        return null;
+
+    }
+
+
+    return value;
+
+}
+
+
+/*
+==================================================
+PUBLIC KEY VALIDATION
+==================================================
+
+The browser exports the ECDH public
+key as Base64.
+
+We do not need to decode the key here.
+
+We only make sure that:
+
+- it is a string
+- it is not empty
+- it is not excessively large
+
+==================================================
+*/
+
+
+function isValidPublicKey(
+    publicKey
+) {
+
+    if (
+        typeof publicKey !==
+        "string"
+    ) {
+
+        return false;
+
+    }
+
+
+    const value =
+        publicKey.trim();
+
+
+    if (
+        value.length < 20 ||
+        value.length > 10000
+    ) {
+
+        return false;
+
+    }
+
+
+    /*
+    Base64 characters only.
+
+    Padding "=" is allowed.
+    */
+
+    return /^[A-Za-z0-9+/]+={0,2}$/.test(
+        value
+    );
+
+}
+
+
+/*
+==================================================
 CURRENT USER
 ==================================================
 */
@@ -146,14 +254,16 @@ router.get(
 
 /*
 ==================================================
-PUBLIC KEY
+REGISTER / UPDATE PUBLIC KEY
 ==================================================
 
-The client sends ONLY its public key.
+The client generates its ECDH key pair
+locally.
 
-The private key must remain on the
-user's device and must NEVER be sent
-to the backend.
+Only the PUBLIC key is sent here.
+
+The private key NEVER leaves the
+device.
 
 ==================================================
 */
@@ -169,16 +279,19 @@ router.put(
 
         try {
 
-            const {
-                publicKey,
-            } = req.body;
+            const publicKey =
+                typeof req.body.publicKey ===
+                "string"
+
+                    ? req.body.publicKey.trim()
+
+                    : "";
 
 
             if (
-                typeof publicKey !==
-                    "string" ||
-
-                !publicKey.trim()
+                !isValidPublicKey(
+                    publicKey
+                )
             ) {
 
                 return res.status(400).json({
@@ -186,7 +299,7 @@ router.put(
                     success: false,
 
                     message:
-                        "Public key is required.",
+                        "A valid public key is required.",
 
                 });
 
@@ -217,8 +330,14 @@ router.put(
             }
 
 
+            /*
+            ------------------------------------------
+            STORE PUBLIC KEY ONLY
+            ------------------------------------------
+            */
+
             user.publicKey =
-                publicKey.trim();
+                publicKey;
 
 
             await user.save();
@@ -228,8 +347,8 @@ router.put(
 
                 success: true,
 
-                publicKey:
-                    user.publicKey,
+                message:
+                    "Public key registered successfully.",
 
             });
 
@@ -239,7 +358,7 @@ router.put(
 
             console.error(
 
-                "UPDATE PUBLIC KEY ERROR:",
+                "REGISTER PUBLIC KEY ERROR:",
 
                 error
 
@@ -251,7 +370,7 @@ router.put(
                 success: false,
 
                 message:
-                    "Unable to update public key",
+                    "Unable to register public key",
 
             });
 
@@ -264,13 +383,19 @@ router.put(
 
 /*
 ==================================================
-GET PUBLIC KEY
+GET RECIPIENT PUBLIC KEY
 ==================================================
 
-Returns only the recipient's public key.
+The authenticated client requests
+the public key belonging to another
+registered user.
 
-The private key is never stored or
-returned by the backend.
+IMPORTANT:
+
+Only the public key is returned.
+
+No private key or sensitive account
+information is returned.
 
 ==================================================
 */
@@ -286,14 +411,38 @@ router.get(
 
         try {
 
+            const phoneNumber =
+                normalizePhoneNumber(
+
+                    req.params.phoneNumber
+
+                );
+
+
+            if (!phoneNumber) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Invalid mobile number.",
+
+                });
+
+            }
+
+
             const user =
                 await User.findOne({
 
-                    phoneNumber:
-                        req.params.phoneNumber,
+                    phoneNumber,
 
-                }).select(
+                })
+                .select(
+
                     "phoneNumber publicKey"
+
                 );
 
 
@@ -303,23 +452,63 @@ router.get(
 
                     success: false,
 
+                    registered: false,
+
                     message:
-                        "User not found",
+                        "User is not registered.",
 
                 });
 
             }
 
 
+            /*
+            ------------------------------------------
+            PUBLIC KEY NOT YET AVAILABLE
+            ------------------------------------------
+            */
+
+            if (
+                !user.publicKey
+            ) {
+
+                return res.status(404).json({
+
+                    success: false,
+
+                    registered: true,
+
+                    publicKeyAvailable:
+                        false,
+
+                    message:
+                        "User has not registered a public key yet.",
+
+                });
+
+            }
+
+
+            /*
+            ------------------------------------------
+            RETURN PUBLIC KEY ONLY
+            ------------------------------------------
+            */
+
             return res.json({
 
                 success: true,
+
+                registered: true,
+
+                publicKeyAvailable:
+                    true,
 
                 phoneNumber:
                     user.phoneNumber,
 
                 publicKey:
-                    user.publicKey || "",
+                    user.publicKey,
 
             });
 
@@ -329,7 +518,7 @@ router.get(
 
             console.error(
 
-                "GET PUBLIC KEY ERROR:",
+                "GET RECIPIENT PUBLIC KEY ERROR:",
 
                 error
 
@@ -387,7 +576,9 @@ router.get(
 
                 })
                 .select(
+
                     "googleDriveConnected googleDriveFolderId lastBackupAt"
+
                 );
 
 
@@ -460,13 +651,12 @@ CONNECT GOOGLE DRIVE
 
 IMPORTANT:
 
-The mobile client performs the
-actual Google authorization.
+The client performs the actual
+Google authorization.
 
 The backend receives only:
 
 - Drive folder ID
-- optional last backup timestamp
 
 NO Google access token.
 NO Google refresh token.
