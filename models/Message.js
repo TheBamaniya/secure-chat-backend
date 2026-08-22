@@ -1,11 +1,14 @@
 const mongoose =
     require("mongoose");
 
+
 const MessageSchema =
     new mongoose.Schema({
 
         /*
+        ==================================================
         GLOBAL MESSAGE ID
+        ==================================================
         */
 
         messageId: {
@@ -17,8 +20,11 @@ const MessageSchema =
             unique: true,
         },
 
+
         /*
+        ==================================================
         PARTICIPANTS
+        ==================================================
         */
 
         sender: {
@@ -35,8 +41,11 @@ const MessageSchema =
             required: true,
         },
 
+
         /*
+        ==================================================
         MESSAGE TYPE
+        ==================================================
         */
 
         messageType: {
@@ -63,11 +72,94 @@ const MessageSchema =
             default: "text",
         },
 
-        /*
-        LOCAL STORAGE REFERENCE
 
-        Actual message content
-        lives on device.
+        /*
+        ==================================================
+        ENCRYPTED MESSAGE CONTENT
+        ==================================================
+
+        IMPORTANT:
+
+        This field contains ONLY encrypted content.
+
+        Plaintext message content must NEVER be
+        stored in MongoDB.
+
+        For text messages this will contain the
+        encrypted AES-GCM envelope.
+
+        ==================================================
+        */
+
+        encryptedContent: {
+
+            type: String,
+
+            default: "",
+        },
+
+
+        /*
+        ==================================================
+        ENCRYPTION ALGORITHM
+        ==================================================
+
+        This allows us to version the encryption
+        architecture later without breaking old
+        messages.
+
+        ==================================================
+        */
+
+        encryptionAlgorithm: {
+
+            type: String,
+
+            enum: [
+
+                "",
+
+                "ECDH-P256-AES-GCM",
+            ],
+
+            default: "",
+        },
+
+
+        /*
+        ==================================================
+        SENDER PUBLIC KEY
+        ==================================================
+
+        The sender's public key is safe to store
+        alongside the encrypted message.
+
+        It is NOT a private key.
+
+        The recipient uses this public key together
+        with their own private key to derive the
+        shared encryption key.
+
+        ==================================================
+        */
+
+        senderPublicKey: {
+
+            type: String,
+
+            default: "",
+        },
+
+
+        /*
+        ==================================================
+        LOCAL STORAGE REFERENCE
+        ==================================================
+
+        Actual decrypted message content should
+        primarily live on the user's device.
+
+        ==================================================
         */
 
         localMessageId: {
@@ -77,13 +169,23 @@ const MessageSchema =
             default: "",
         },
 
+
         /*
+        ==================================================
         THUMBNAIL
+        ==================================================
 
         Used for:
-        replies
-        media previews
-        chat list previews
+
+        - replies
+        - media previews
+        - chat list previews
+
+        For future encrypted-content handling,
+        sensitive plaintext previews should remain
+        local rather than being sent to MongoDB.
+
+        ==================================================
         */
 
         thumbnail: {
@@ -93,8 +195,11 @@ const MessageSchema =
             default: "",
         },
 
+
         /*
+        ==================================================
         FILE INFO
+        ==================================================
         */
 
         fileName: {
@@ -111,8 +216,11 @@ const MessageSchema =
             default: 0,
         },
 
+
         /*
+        ==================================================
         GOOGLE DRIVE
+        ==================================================
         */
 
         driveFileId: {
@@ -136,8 +244,11 @@ const MessageSchema =
             default: false,
         },
 
+
         /*
+        ==================================================
         REPLY
+        ==================================================
         */
 
         replyTo: {
@@ -154,8 +265,11 @@ const MessageSchema =
             default: "",
         },
 
+
         /*
+        ==================================================
         FORWARD
+        ==================================================
         */
 
         forwarded: {
@@ -172,11 +286,13 @@ const MessageSchema =
             default: "",
         },
 
+
         /*
+        ==================================================
         REACTIONS
 
-        ONE REACTION
-        PER USER
+        ONE REACTION PER USER
+        ==================================================
         */
 
         reactions: [
@@ -203,8 +319,11 @@ const MessageSchema =
             },
         ],
 
+
         /*
+        ==================================================
         STARRED
+        ==================================================
         */
 
         starredBy: [
@@ -215,8 +334,11 @@ const MessageSchema =
             },
         ],
 
+
         /*
+        ==================================================
         DELETE FOR ME
+        ==================================================
         */
 
         deletedFor: [
@@ -227,8 +349,11 @@ const MessageSchema =
             },
         ],
 
+
         /*
+        ==================================================
         DELETE FOR EVERYONE
+        ==================================================
         */
 
         deletedForEveryone: {
@@ -243,8 +368,11 @@ const MessageSchema =
             type: Date,
         },
 
+
         /*
+        ==================================================
         DELIVERY STATUS
+        ==================================================
         */
 
         status: {
@@ -277,8 +405,11 @@ const MessageSchema =
             type: Date,
         },
 
+
         /*
+        ==================================================
         OFFLINE SYNC
+        ==================================================
         */
 
         syncVersion: {
@@ -309,12 +440,17 @@ const MessageSchema =
             type: Date,
         },
 
-        /*
-        RETRY QUEUE
 
-        Helps recover from
-        bad internet/network
-        failures.
+        /*
+        ==================================================
+        RETRY QUEUE
+        ==================================================
+
+        Helps recover from temporary network
+        failures without creating duplicate
+        messages.
+
+        ==================================================
         */
 
         retryCount: {
@@ -329,8 +465,11 @@ const MessageSchema =
             type: Date,
         },
 
+
         /*
+        ==================================================
         EDIT
+        ==================================================
         */
 
         edited: {
@@ -345,8 +484,11 @@ const MessageSchema =
             type: Date,
         },
 
+
         /*
+        ==================================================
         TIMESTAMPS
+        ==================================================
         */
 
         sentAt: {
@@ -364,10 +506,12 @@ const MessageSchema =
             default:
                 Date.now,
         },
+
     });
+
 
 module.exports =
     mongoose.model(
         "Message",
-        MessageSchema,
+        MessageSchema
     );

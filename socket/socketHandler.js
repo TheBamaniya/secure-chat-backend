@@ -4,6 +4,9 @@ const jwt =
 const Message =
     require("../models/Message");
 
+const User =
+    require("../models/User");
+
 const generateMessageId =
     require("../utils/generateMessageId");
 
@@ -13,6 +16,9 @@ const generateMessageId =
 CONNECTED USERS
 
 phoneNumber -> socket information
+
+Current architecture allows one active socket
+per account.
 ==================================================
 */
 
@@ -268,11 +274,6 @@ module.exports =
             ==========================================
             */
 
-            /*
-            The phone number comes from JWT.
-            The client cannot choose it.
-            */
-
             const previousUser =
                 users[user];
 
@@ -320,6 +321,38 @@ module.exports =
                 user;
 
 
+            /*
+            ==========================================
+            UPDATE LAST SEEN
+            ==========================================
+            */
+
+            User.findOneAndUpdate(
+
+                {
+                    phoneNumber:
+                        user,
+                },
+
+                {
+                    lastSeen:
+                        new Date(),
+                }
+
+            ).catch(
+
+                (error) => {
+
+                    console.error(
+
+                        "UPDATE LAST SEEN ERROR:",
+
+                        error
+                    );
+                }
+            );
+
+
             socket.emit(
 
                 "socket_authenticated",
@@ -340,6 +373,144 @@ module.exports =
                 "user_online",
 
                 user
+            );
+
+
+            /*
+            ==========================================
+            PRESENCE CHECK
+            ==========================================
+            */
+
+            socket.on(
+
+                "check_user_presence",
+
+                async (data) => {
+
+                    try {
+
+                        if (!data) {
+
+                            return;
+                        }
+
+                        const requestedNumber =
+                            normalizeNumber(
+                                data.phoneNumber
+                            );
+
+
+                        if (
+                            !requestedNumber
+                        ) {
+
+                            socket.emit(
+
+                                "user_presence",
+
+                                {
+
+                                    phoneNumber:
+                                        "",
+
+                                    registered:
+                                        false,
+
+                                    online:
+                                        false,
+
+                                    lastSeenAt:
+                                        null,
+                                }
+                            );
+
+                            return;
+                        }
+
+
+                        const registeredUser =
+                            await User.findOne({
+
+                                phoneNumber:
+                                    requestedNumber,
+
+                            }).select(
+
+                                "phoneNumber lastSeen"
+                            );
+
+
+                        const connectedUser =
+                            getConnectedUser(
+                                requestedNumber
+                            );
+
+
+                        socket.emit(
+
+                            "user_presence",
+
+                            {
+
+                                phoneNumber:
+                                    requestedNumber,
+
+                                registered:
+                                    Boolean(
+                                        registeredUser
+                                    ),
+
+                                online:
+                                    Boolean(
+                                        connectedUser
+                                    ),
+
+                                lastSeenAt:
+                                    registeredUser
+                                        ? (
+                                            registeredUser
+                                                .lastSeen ||
+                                            null
+                                        )
+                                        : null,
+                            }
+                        );
+
+                    } catch (error) {
+
+                        console.error(
+
+                            "USER PRESENCE ERROR:",
+
+                            error
+                        );
+
+
+                        socket.emit(
+
+                            "user_presence",
+
+                            {
+
+                                phoneNumber:
+                                    normalizeNumber(
+                                        data &&
+                                        data.phoneNumber
+                                    ),
+
+                                registered:
+                                    false,
+
+                                online:
+                                    false,
+
+                                lastSeenAt:
+                                    null,
+                            }
+                        );
+                    }
+                }
             );
 
 
@@ -471,6 +642,7 @@ module.exports =
                             return;
                         }
 
+
                         /*
                         ONLY RECEIVER CAN
                         MARK MESSAGE AS SEEN
@@ -498,10 +670,6 @@ module.exports =
 
                         await message.save();
 
-
-                        /*
-                        Notify sender.
-                        */
 
                         emitToUser(
 
@@ -537,6 +705,21 @@ module.exports =
             ==========================================
             SEND MESSAGE
             ==========================================
+
+            IMPORTANT:
+
+            Plaintext message text is NOT accepted.
+
+            The client must send:
+
+            encryptedContent
+            encryptionAlgorithm
+            senderPublicKey
+
+            The backend stores and forwards the
+            encrypted envelope only.
+
+            ==========================================
             */
 
             socket.on(
@@ -549,26 +732,45 @@ module.exports =
 
                         if (!data) {
 
+                            socket.emit(
+
+                                "message_send_failed",
+
+                                {
+
+                                    localMessageId:
+                                        "",
+
+                                    message:
+                                        "Message data is missing",
+                                }
+                            );
+
                             return;
                         }
 
+
                         /*
-                        IMPORTANT:
-
-                        sender is taken from
-                        authenticated socket.
-
-                        We do NOT use
-                        data.sender.
+                        ======================================
+                        AUTHENTICATED SENDER
+                        ======================================
                         */
 
                         const sender =
                             user;
 
+
+                        /*
+                        ======================================
+                        RECEIVER
+                        ======================================
+                        */
+
                         const receiver =
                             normalizeNumber(
                                 data.receiver
                             );
+
 
                         if (!receiver) {
 
@@ -590,14 +792,16 @@ module.exports =
                             return;
                         }
 
+
                         /*
-                        A user cannot send a
-                        message to themselves
-                        through this endpoint.
+                        ======================================
+                        SELF MESSAGE
+                        ======================================
                         */
 
                         if (
-                            sender === receiver
+                            sender ===
+                            receiver
                         ) {
 
                             socket.emit(
@@ -619,13 +823,132 @@ module.exports =
                         }
 
 
+                        /*
+                        ======================================
+                        ENCRYPTED CONTENT VALIDATION
+                        ======================================
+                        */
+
+                        const encryptedContent =
+                            typeof data.encryptedContent ===
+                            "string"
+                                ? data.encryptedContent.trim()
+                                : "";
+
+
+                        if (!encryptedContent) {
+
+                            socket.emit(
+
+                                "message_send_failed",
+
+                                {
+
+                                    localMessageId:
+                                        data.localMessageId ||
+                                        "",
+
+                                    message:
+                                        "Encrypted message content is required",
+                                }
+                            );
+
+                            return;
+                        }
+
+
+                        /*
+                        ======================================
+                        ENCRYPTION ALGORITHM
+                        ======================================
+                        */
+
+                        const encryptionAlgorithm =
+                            typeof data.encryptionAlgorithm ===
+                            "string"
+                                ? data.encryptionAlgorithm.trim()
+                                : "";
+
+
+                        if (
+                            encryptionAlgorithm !==
+                            "ECDH-P256-AES-GCM"
+                        ) {
+
+                            socket.emit(
+
+                                "message_send_failed",
+
+                                {
+
+                                    localMessageId:
+                                        data.localMessageId ||
+                                        "",
+
+                                    message:
+                                        "Unsupported encryption algorithm",
+                                }
+                            );
+
+                            return;
+                        }
+
+
+                        /*
+                        ======================================
+                        SENDER PUBLIC KEY
+                        ======================================
+                        */
+
+                        const senderPublicKey =
+                            typeof data.senderPublicKey ===
+                            "string"
+                                ? data.senderPublicKey.trim()
+                                : "";
+
+
+                        if (!senderPublicKey) {
+
+                            socket.emit(
+
+                                "message_send_failed",
+
+                                {
+
+                                    localMessageId:
+                                        data.localMessageId ||
+                                        "",
+
+                                    message:
+                                        "Sender public key is required",
+                                }
+                            );
+
+                            return;
+                        }
+
+
+                        /*
+                        ======================================
+                        MESSAGE ID
+                        ======================================
+                        */
+
                         const messageId =
                             generateMessageId();
 
 
                         /*
-                        SERVER STORES
-                        METADATA ONLY
+                        ======================================
+                        CREATE MESSAGE
+                        ======================================
+
+                        IMPORTANT:
+
+                        No plaintext text field is
+                        written to MongoDB.
+
+                        ======================================
                         */
 
                         const metadata =
@@ -640,6 +963,12 @@ module.exports =
                                 messageType:
                                     data.messageType ||
                                     "text",
+
+                                encryptedContent,
+
+                                encryptionAlgorithm,
+
+                                senderPublicKey,
 
                                 localMessageId:
                                     data.localMessageId ||
@@ -685,6 +1014,17 @@ module.exports =
                             });
 
 
+                        /*
+                        ======================================
+                        ENCRYPTED DELIVERY PAYLOAD
+                        ======================================
+
+                        Only encrypted content and
+                        metadata leave the backend.
+
+                        ======================================
+                        */
+
                         const payload = {
 
                             messageId,
@@ -700,6 +1040,12 @@ module.exports =
                             messageType:
                                 data.messageType ||
                                 "text",
+
+                            encryptedContent,
+
+                            encryptionAlgorithm,
+
+                            senderPublicKey,
 
                             replyTo:
                                 data.replyTo ||
@@ -731,7 +1077,9 @@ module.exports =
 
 
                         /*
+                        ======================================
                         TRY DELIVERY
+                        ======================================
                         */
 
                         const delivered =
@@ -753,6 +1101,12 @@ module.exports =
                             );
 
 
+                        /*
+                        ======================================
+                        DELIVERED
+                        ======================================
+                        */
+
                         if (
                             delivered
                         ) {
@@ -770,7 +1124,9 @@ module.exports =
 
 
                             /*
-                            Tell sender
+                            Tell sender that the
+                            receiver actually received
+                            the socket event.
                             */
 
                             emitToUser(
@@ -785,18 +1141,32 @@ module.exports =
 
                                     messageId,
 
+                                    localMessageId:
+                                        data.localMessageId ||
+                                        "",
+
                                     deliveredAt:
                                         metadata.deliveredAt,
                                 }
                             );
 
-                        } else {
+                        }
 
-                            /*
-                            Receiver offline.
 
-                            Keep status SENT.
-                            */
+                        /*
+                        ======================================
+                        RECEIVER OFFLINE
+                        ======================================
+
+                        Keep the message as SENT.
+
+                        The sender is informed that
+                        the backend accepted the message.
+
+                        ======================================
+                        */
+
+                        else {
 
                             emitToUser(
 
@@ -810,10 +1180,15 @@ module.exports =
 
                                     messageId,
 
+                                    localMessageId:
+                                        data.localMessageId ||
+                                        "",
+
                                     timestamp:
                                         metadata.timestamp,
                                 }
                             );
+
                         }
 
                     } catch (error) {
@@ -909,10 +1284,6 @@ module.exports =
                         }
 
 
-                        /*
-                        FIND EXISTING REACTION
-                        */
-
                         const existingIndex =
                             message.reactions
                                 .findIndex(
@@ -954,6 +1325,7 @@ module.exports =
 
                         }
 
+
                         /*
                         DIFFERENT EMOJI
                         REPLACE
@@ -976,6 +1348,7 @@ module.exports =
                             action =
                                 "replaced";
                         }
+
 
                         /*
                         ADD
@@ -1022,14 +1395,6 @@ module.exports =
                                 message.reactions,
                         };
 
-
-                        /*
-                        Notify BOTH SIDES.
-
-                        If sender reacts to their
-                        own message, the socket
-                        receives it once.
-                        */
 
                         emitToUser(
 
@@ -1158,10 +1523,6 @@ module.exports =
                         };
 
 
-                        /*
-                        Notify receiver.
-                        */
-
                         emitToUser(
 
                             io,
@@ -1173,10 +1534,6 @@ module.exports =
                             payload
                         );
 
-
-                        /*
-                        Confirm to sender.
-                        */
 
                         emitToUser(
 
@@ -1436,7 +1793,17 @@ module.exports =
 
                 "disconnect",
 
-                () => {
+                async () => {
+
+                    /*
+                    Only remove this user's entry
+                    if it still belongs to this
+                    exact socket.
+
+                    This prevents an old socket
+                    from accidentally marking a
+                    newer connection offline.
+                    */
 
                     if (
 
@@ -1449,6 +1816,37 @@ module.exports =
 
                         delete users[user];
 
+
+                        /*
+                        Record last seen.
+                        */
+
+                        try {
+
+                            await User.findOneAndUpdate(
+
+                                {
+                                    phoneNumber:
+                                        user,
+                                },
+
+                                {
+                                    lastSeen:
+                                        new Date(),
+                                }
+                            );
+
+                        } catch (error) {
+
+                            console.error(
+
+                                "UPDATE LAST SEEN ON DISCONNECT ERROR:",
+
+                                error
+                            );
+                        }
+
+
                         socket.broadcast.emit(
 
                             "user_offline",
@@ -1456,6 +1854,7 @@ module.exports =
                             user
                         );
                     }
+
 
                     console.log(
 
